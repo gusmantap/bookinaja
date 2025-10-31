@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Global input, textarea, and select styles */
+input,
+textarea,
+select {
+  /* Ensure text is visible */
+  color: #18181b; /* zinc-900 */
+}
+
+/* Ensure label text is visible */
+label {
+  color: #3f3f46; /* zinc-700 - default for labels */
+}
+
+/* Placeholder styles - make them more visible */
+input::placeholder,
+textarea::placeholder {
+  color: #a1a1aa; /* zinc-400 - visible but subtle */
+  opacity: 1;
+}
+
+/* Fix for autofill background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #18181b;
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Ensure disabled inputs are also visible */
+input:disabled,
+textarea:disabled,
+select:disabled {
+  color: #71717a; /* zinc-500 */
+  opacity: 0.6;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Utility for hiding scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
