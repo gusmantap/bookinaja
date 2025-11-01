@@ -1,20 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { MemberRole } from '@/lib/pbac';
+import crypto from 'crypto';
 
 // Tipe untuk invitation request
 type InvitationRequest = {
   email: string;
-  role: 'admin' | 'staff';
+  role: MemberRole;
+  businessId: string;
+  userId: string; // Inviter user ID from session
 };
 
 // Tipe untuk invitation response
 type InvitationResponse = {
   id: string;
   email: string;
-  role: 'admin' | 'staff';
+  role: string;
   status: 'pending';
   invitedAt: string;
   expiresAt: string;
 };
+
+/**
+ * Generate secure token for invitation
+ */
+function generateInvitationToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
 
 /**
  * POST /api/invitations
@@ -23,7 +35,7 @@ type InvitationResponse = {
 export async function POST(request: NextRequest) {
   try {
     const body: InvitationRequest = await request.json();
-    const { email, role } = body;
+    const { email, role, businessId, userId } = body;
 
     // Validasi input
     if (!email || !email.includes('@')) {
@@ -33,64 +45,115 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!role || !['admin', 'staff'].includes(role)) {
+    if (!role || !Object.values(MemberRole).includes(role)) {
       return NextResponse.json(
-        { error: 'Role tidak valid. Gunakan "admin" atau "staff"' },
+        { error: 'Role tidak valid' },
         { status: 400 }
       );
     }
 
-    // TODO: Implementasi berikut:
-    // 1. Cek apakah user sudah ada di database
-    // 2. Cek apakah sudah ada undangan pending untuk email ini
-    // 3. Generate token unik untuk invitation
-    // 4. Simpan invitation ke database dengan expiry 7 hari
-    // 5. Kirim email undangan menggunakan service email (Resend, SendGrid, dll)
+    if (!businessId || !userId) {
+      return NextResponse.json(
+        { error: 'Business ID dan User ID harus disertakan' },
+        { status: 400 }
+      );
+    }
 
-    // Contoh: Check if user exists
-    // const existingUser = await prisma.user.findUnique({
-    //   where: { email }
-    // });
-    //
-    // if (existingUser) {
-    //   return NextResponse.json(
-    //     { error: 'User dengan email ini sudah terdaftar' },
-    //     { status: 400 }
-    //   );
-    // }
+    // Check if user already exists and is a member
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
 
-    // Contoh: Create invitation
-    // const token = generateSecureToken(); // Implement token generation
-    // const expiresAt = new Date();
-    // expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
-    //
-    // const invitation = await prisma.invitation.create({
-    //   data: {
-    //     email,
-    //     role,
-    //     token,
-    //     expiresAt,
-    //     businessId: currentUser.businessId, // Get from session
-    //     invitedBy: currentUser.id, // Get from session
-    //   }
-    // });
+    if (existingUser) {
+      const existingMember = await prisma.businessMember.findUnique({
+        where: {
+          userId_businessId: {
+            userId: existingUser.id,
+            businessId,
+          },
+        },
+      });
 
-    // Contoh: Send email
+      if (existingMember) {
+        return NextResponse.json(
+          { error: 'User sudah menjadi anggota bisnis ini' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Check if pending invitation already exists
+    const existingInvitation = await prisma.invitation.findFirst({
+      where: {
+        email,
+        businessId,
+        status: 'pending',
+      },
+    });
+
+    if (existingInvitation) {
+      return NextResponse.json(
+        { error: 'Undangan untuk email ini sudah dikirim sebelumnya' },
+        { status: 400 }
+      );
+    }
+
+    // Generate token dan expiry
+    const token = generateInvitationToken();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+
+    // Create invitation
+    const invitation = await prisma.invitation.create({
+      data: {
+        email,
+        role,
+        token,
+        expiresAt,
+        businessId,
+        invitedBy: userId,
+        status: 'pending',
+      },
+      include: {
+        business: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    // TODO: Send email menggunakan service email (Resend, SendGrid, dll)
+    // const inviteUrl = `${process.env.NEXT_PUBLIC_HOST}/invite/${token}`;
     // await sendInvitationEmail({
     //   to: email,
-    //   inviteUrl: `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`,
-    //   businessName: currentUser.businessName,
+    //   inviteUrl,
+    //   businessName: invitation.business.name,
     //   role,
     // });
 
-    // Dummy response untuk testing
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        businessId,
+        action: 'invite_member',
+        entityType: 'invitation',
+        entityId: invitation.id,
+        metadata: {
+          email,
+          role,
+        },
+      },
+    });
+
     const invitationResponse: InvitationResponse = {
-      id: `inv_${Date.now()}`,
-      email,
-      role,
+      id: invitation.id,
+      email: invitation.email,
+      role: invitation.role,
       status: 'pending',
-      invitedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+      invitedAt: invitation.createdAt.toISOString(),
+      expiresAt: invitation.expiresAt.toISOString(),
     };
 
     return NextResponse.json(
@@ -116,52 +179,38 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    // TODO: Implementasi berikut:
-    // 1. Get current user dari session
-    // 2. Get semua invitations untuk business user ini
-    // 3. Return daftar invitations
+    const { searchParams } = new URL(request.url);
+    const businessId = searchParams.get('businessId');
 
-    // Contoh:
-    // const session = await getServerSession();
-    // if (!session?.user) {
-    //   return NextResponse.json(
-    //     { error: 'Unauthorized' },
-    //     { status: 401 }
-    //   );
-    // }
-    //
-    // const invitations = await prisma.invitation.findMany({
-    //   where: {
-    //     businessId: session.user.businessId,
-    //   },
-    //   orderBy: {
-    //     createdAt: 'desc',
-    //   },
-    // });
+    if (!businessId) {
+      return NextResponse.json(
+        { error: 'Business ID harus disertakan' },
+        { status: 400 }
+      );
+    }
 
-    // Dummy data untuk testing
-    const dummyInvitations = [
-      {
-        id: 'inv_1',
-        email: 'admin@example.com',
-        role: 'admin',
-        status: 'accepted',
-        invitedAt: '2025-10-25T10:00:00Z',
-        expiresAt: '2025-11-01T10:00:00Z',
+    // TODO: Verify user has permission to view invitations for this business
+
+    const invitations = await prisma.invitation.findMany({
+      where: {
+        businessId,
       },
-      {
-        id: 'inv_2',
-        email: 'staff@example.com',
-        role: 'staff',
-        status: 'pending',
-        invitedAt: '2025-10-28T14:30:00Z',
-        expiresAt: '2025-11-04T14:30:00Z',
+      include: {
+        inviter: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
       },
-    ];
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
 
     return NextResponse.json({
       success: true,
-      data: dummyInvitations,
+      data: invitations,
     });
   } catch (error) {
     console.error('Error fetching invitations:', error);

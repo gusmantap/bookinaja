@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 
 type DayHours = {
   closed: boolean;
@@ -43,6 +44,7 @@ const defaultWeekendHours: DayHours = {
 
 export default function OnboardingStep3() {
   const router = useRouter();
+  const { data: session, update } = useSession();
   const [operatingHours, setOperatingHours] = useState<OperatingHours>({
     monday: { ...defaultHours },
     tuesday: { ...defaultHours },
@@ -102,18 +104,39 @@ export default function OnboardingStep3() {
         return;
       }
 
+      if (!session?.user?.id) {
+        alert('Session tidak ditemukan. Silakan login kembali.');
+        router.push('/login');
+        return;
+      }
+
       const businessData = {
         subdomain,
         ...JSON.parse(step1Data),
         services: JSON.parse(step2Data),
         operatingHours,
+        userId: session.user.id,
       };
 
-      // TODO: Send to API endpoint to create business
-      console.log('Business Data:', businessData);
+      // Call API endpoint to create business
+      const response = await fetch('/api/onboarding', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(businessData),
+      });
 
-      // For now, redirect to preview (temporary)
-      alert('Onboarding selesai! Data sudah tersimpan di console.');
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Gagal membuat bisnis');
+      }
+
+      // Update session to mark onboarding as completed
+      await update({
+        onboardingCompleted: true,
+      });
 
       // Clear sessionStorage
       sessionStorage.removeItem('onboarding_subdomain');
@@ -121,8 +144,8 @@ export default function OnboardingStep3() {
       sessionStorage.removeItem('onboarding_step2');
       sessionStorage.removeItem('onboarding_step3');
 
-      // Redirect to business profile
-      router.push(`/${subdomain}`);
+      // Redirect to business public page
+      router.push(`/${data.data.slug}`);
     } catch (error) {
       console.error('Error:', error);
       alert('Terjadi kesalahan. Coba lagi.');

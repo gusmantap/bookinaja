@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 
 type Booking = {
@@ -9,55 +10,65 @@ type Booking = {
   customerName: string;
   customerPhone: string;
   customerEmail: string;
-  service: string;
-  date: string;
-  time: string;
+  service: {
+    id: string;
+    name: string;
+  };
+  bookingDate: string;
+  bookingTime: string;
   notes?: string;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  payment?: {
+    id: string;
+    method: string;
+    status: string;
+    proofUrl: string | null;
+    amount: number;
+  } | null;
   createdAt: string;
 };
 
 export default function BookingManagementPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'>('all');
-  const [businessName] = useState('Demo Business'); // TODO: Get from context/API
   const [isLoading, setIsLoading] = useState(true);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   useEffect(() => {
-    // TODO: Fetch bookings from API
-    // For now, use dummy data
-    const dummyBookings: Booking[] = [
-      {
-        id: '1',
-        customerName: 'John Doe',
-        customerPhone: '08123456789',
-        customerEmail: 'john@example.com',
-        service: 'Haircut Classic',
-        date: '2025-11-15',
-        time: '14:00',
-        notes: 'Mohon dipotong pendek',
-        status: 'pending',
-        createdAt: '2025-10-30T10:00:00',
-      },
-      {
-        id: '2',
-        customerName: 'Jane Smith',
-        customerPhone: '08234567890',
-        customerEmail: 'jane@example.com',
-        service: 'Manicure',
-        date: '2025-11-16',
-        time: '10:00',
-        status: 'confirmed',
-        createdAt: '2025-10-29T15:30:00',
-      },
-    ];
+    let isMounted = true;
 
-    setBookings(dummyBookings);
-    setIsLoading(false);
-  }, []);
+    // Fetch bookings from API
+    async function fetchBookings() {
+      if (!session?.user?.id) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/bookings');
+        const data = await response.json();
+
+        if (isMounted && data.bookings) {
+          setBookings(data.bookings);
+        }
+      } catch (error) {
+        console.error('Error fetching bookings:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    fetchBookings();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user?.id]);
 
   const filteredBookings = filter === 'all'
     ? bookings
@@ -78,12 +89,37 @@ export default function BookingManagementPage() {
   };
 
   const updateStatus = async (bookingId: string, newStatus: Booking['status']) => {
-    // TODO: Call API to update status
-    setBookings(bookings.map(b =>
-      b.id === bookingId ? { ...b, status: newStatus } : b
-    ));
-    setStatusModalOpen(false);
+    try {
+      const response = await fetch(`/api/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        setBookings(bookings.map(b =>
+          b.id === bookingId ? { ...b, status: newStatus } : b
+        ));
+        setStatusModalOpen(false);
+      } else {
+        alert('Gagal mengubah status booking');
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Gagal mengubah status booking');
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="bg-zinc-50 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-zinc-600">Memuat booking...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-zinc-50 min-h-screen">
@@ -201,21 +237,21 @@ export default function BookingManagementPage() {
                     {/* Service */}
                     <div className="mb-2">
                       <span className="inline-block px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs sm:text-sm font-semibold">
-                        {booking.service}
+                        {booking.service.name}
                       </span>
                     </div>
 
                     {/* Date & Time */}
                     <div className="flex items-center gap-2 text-xs sm:text-sm text-zinc-500 mb-2">
                       <span className="font-medium">
-                        {new Date(booking.date).toLocaleDateString('id-ID', {
+                        {new Date(booking.bookingDate).toLocaleDateString('id-ID', {
                           day: '2-digit',
                           month: 'short',
                           year: 'numeric'
                         })}
                       </span>
                       <span>•</span>
-                      <span>{booking.time} WIB</span>
+                      <span>{booking.bookingTime} WIB</span>
                     </div>
 
                     {booking.notes && (
@@ -223,6 +259,33 @@ export default function BookingManagementPage() {
                         <p className="text-xs sm:text-sm text-zinc-600">
                           <span className="font-semibold text-zinc-700">Catatan:</span> {booking.notes}
                         </p>
+                      </div>
+                    )}
+
+                    {/* Payment Info */}
+                    {booking.payment && (
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xs font-semibold text-zinc-700">
+                          {booking.payment.method === 'cash' ? '💵 Cash' : '💳 Transfer'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          booking.payment.status === 'paid'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {booking.payment.status}
+                        </span>
+                        {booking.payment.proofUrl && (
+                          <a
+                            href={booking.payment.proofUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-blue-600 hover:text-blue-700 underline font-medium"
+                          >
+                            Lihat Bukti
+                          </a>
+                        )}
                       </div>
                     )}
 

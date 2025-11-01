@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Business, Theme } from '@/types';
 import PaymentMethodSelect from './PaymentMethodSelect';
 import PaymentProofUpload from './PaymentProofUpload';
@@ -11,18 +12,33 @@ interface BookingFormProps {
 }
 
 export default function BookingForm({ business, theme }: BookingFormProps) {
+  const router = useRouter();
   const [paymentMethod, setPaymentMethod] = useState<'onsite' | 'transfer'>('onsite');
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedService, setSelectedService] = useState<string>('');
+  const [selectedTime, setSelectedTime] = useState<string>('');
 
   const today = new Date().toISOString().split('T')[0];
 
-  const bookedTimes = ['10:00', '14:00']; // Mock booked times
-  const availableTimes = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+  // Generate available times from 08:00 to 22:00 (8 AM to 10 PM)
+  const availableTimes = [
+    '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00',
+    '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'
+  ];
+  const bookedTimes: string[] = []; // Will be fetched from API in the future
+
+  // Get selected service details
+  const selectedServiceData = business.services.find(s => s.id === selectedService);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (!selectedService) {
+      alert('Silakan pilih layanan terlebih dahulu!');
+      return;
+    }
 
     if (paymentMethod === 'transfer' && !paymentProof) {
       alert('Silakan upload bukti transfer terlebih dahulu!');
@@ -33,11 +49,18 @@ export default function BookingForm({ business, theme }: BookingFormProps) {
 
     try {
       const formData = new FormData(e.currentTarget);
+
+      // Save form values before async operation
+      const name = formData.get('name') as string;
+      const phone = formData.get('phone') as string;
+      const date = formData.get('date') as string;
+
       if (paymentProof) {
         formData.append('payment_proof', paymentProof);
       }
       formData.append('business_id', business.id);
       formData.append('payment_method', paymentMethod);
+      formData.append('service_id', selectedService);
 
       const response = await fetch('/api/bookings', {
         method: 'POST',
@@ -45,11 +68,18 @@ export default function BookingForm({ business, theme }: BookingFormProps) {
       });
 
       if (response.ok) {
-        alert('Booking berhasil! Kami akan segera menghubungi Anda via WhatsApp.');
-        (e.target as HTMLFormElement).reset();
-        setPaymentMethod('onsite');
-        setPaymentProof(null);
-        setPreviewUrl(null);
+        // Redirect to thank you page with booking info
+        const params = new URLSearchParams({
+          business: business.name,
+          slug: business.slug,
+          name: name,
+          service: selectedServiceData?.name || '',
+          date: date,
+          time: selectedTime,
+          phone: phone,
+        });
+
+        router.push(`/booking-success?${params.toString()}`);
       } else {
         throw new Error('Failed to create booking');
       }
@@ -78,6 +108,34 @@ export default function BookingForm({ business, theme }: BookingFormProps) {
             className={`w-full px-4 py-2.5 rounded-xl border border-zinc-300 focus:border-${theme.accentColor}-500 focus:ring-2 focus:ring-${theme.accentColor}-200 outline-none transition`}
             placeholder="Nama Anda"
           />
+        </div>
+
+        {/* Pilih Layanan */}
+        <div>
+          <label className="block text-sm font-semibold text-zinc-700 mb-2">
+            Pilih Layanan
+          </label>
+          <select
+            value={selectedService}
+            onChange={(e) => setSelectedService(e.target.value)}
+            required
+            className={`w-full px-4 py-2.5 rounded-xl border border-zinc-300 focus:border-${theme.accentColor}-500 focus:ring-2 focus:ring-${theme.accentColor}-200 outline-none transition`}
+          >
+            <option value="">-- Pilih Layanan --</option>
+            {business.services.map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.name} - Rp {service.price.toLocaleString('id-ID')} ({service.duration})
+              </option>
+            ))}
+          </select>
+          {selectedServiceData && (
+            <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-900">
+                <span className="font-semibold">Harga:</span> Rp {selectedServiceData.price.toLocaleString('id-ID')} <br />
+                <span className="font-semibold">Durasi:</span> {selectedServiceData.duration}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Nomor WhatsApp */}
@@ -112,34 +170,30 @@ export default function BookingForm({ business, theme }: BookingFormProps) {
         {/* Pilih Waktu */}
         <div>
           <label className="block text-sm font-semibold text-zinc-700 mb-3">
-            Pilih Waktu
+            Pilih Waktu (08:00 - 22:00)
           </label>
-          <div className="grid grid-cols-3 gap-2">
+          <input type="hidden" name="time" value={selectedTime} required />
+          <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto">
             {availableTimes.map((time) => {
               const isBooked = bookedTimes.includes(time);
+              const isSelected = selectedTime === time;
               return (
-                <div key={time}>
-                  <input
-                    type="radio"
-                    id={`time_${time}`}
-                    name="time"
-                    value={time}
-                    required
-                    disabled={isBooked}
-                    className="peer hidden"
-                  />
-                  <label
-                    htmlFor={`time_${time}`}
-                    className={`block text-center py-2 rounded-lg text-sm font-medium cursor-pointer transition-all ${
-                      isBooked
-                        ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
-                        : `text-zinc-900 border-2 border-zinc-200 hover:border-${theme.accentColor}-400 peer-checked:border-${theme.accentColor}-500 peer-checked:bg-${theme.accentColor}-50 peer-checked:text-${theme.accentColor}-700`
-                    }`}
-                  >
-                    {time}
-                    {isBooked && <div className="text-[10px]">Penuh</div>}
-                  </label>
-                </div>
+                <button
+                  key={time}
+                  type="button"
+                  onClick={() => !isBooked && setSelectedTime(time)}
+                  disabled={isBooked}
+                  className={`py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                    isBooked
+                      ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                      : isSelected
+                      ? 'border-2 border-blue-500 bg-blue-50 text-blue-700 font-semibold'
+                      : 'border-2 border-zinc-200 text-zinc-900 hover:border-blue-400 hover:bg-blue-50'
+                  }`}
+                >
+                  {time}
+                  {isBooked && <div className="text-[10px]">Penuh</div>}
+                </button>
               );
             })}
           </div>

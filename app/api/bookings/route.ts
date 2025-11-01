@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
@@ -12,14 +12,27 @@ export async function POST(request: NextRequest) {
     const time = formData.get('time') as string;
     const notes = formData.get('notes') as string | null;
     const businessId = formData.get('business_id') as string;
+    const serviceId = formData.get('service_id') as string;
     const paymentMethod = formData.get('payment_method') as 'onsite' | 'transfer';
     const paymentProofFile = formData.get('payment_proof') as File | null;
 
     // Validate required fields
-    if (!name || !phone || !date || !time || !businessId) {
+    if (!name || !phone || !date || !time || !businessId || !serviceId) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
+      );
+    }
+
+    // Get service details
+    const service = await prisma.service.findUnique({
+      where: { id: serviceId },
+    });
+
+    if (!service) {
+      return NextResponse.json(
+        { error: 'Service not found' },
+        { status: 404 }
       );
     }
 
@@ -70,16 +83,27 @@ export async function POST(request: NextRequest) {
         customerName: name,
         customerPhone: phone,
         customerEmail: null,
-        service: 'TBD', // Will be selected from services list
-        price: 0, // Will be calculated based on service
+        service: service.name,
+        serviceId: service.id,
+        price: service.price,
         date: new Date(date),
         time,
-        duration: '30 menit', // Default duration
+        duration: service.duration,
         status: 'pending',
         notes: notes || null,
-        paymentMethod,
-        paymentProofUrl,
         businessId,
+      },
+    });
+
+    // Create payment record
+    await prisma.payment.create({
+      data: {
+        bookingId: booking.id,
+        amount: service.price,
+        method: paymentMethod === 'onsite' ? 'cash' : 'transfer',
+        status: paymentMethod === 'transfer' && paymentProofUrl ? 'pending' : 'pending',
+        proofUrl: paymentProofUrl,
+        notes: paymentMethod === 'transfer' ? 'Payment proof uploaded' : null,
       },
     });
 
@@ -104,23 +128,81 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const businessId = searchParams.get('business_id');
 
-    if (!businessId) {
+    // If businessId provided, use it (for public booking form)
+    if (businessId) {
+      const bookings = await prisma.booking.findMany({
+        where: {
+          businessId,
+        },
+        orderBy: {
+          bookingDate: 'desc',
+        },
+      });
+      return NextResponse.json({ bookings });
+    }
+
+    // Otherwise, get bookings for authenticated user's business (for dashboard)
+    const { auth } = await import('@/auth');
+    const session = await auth();
+
+    if (!session?.user?.id) {
       return NextResponse.json(
-        { error: 'business_id is required' },
-        { status: 400 }
+        { error: 'Not authenticated' },
+        { status: 401 }
       );
     }
 
-    const bookings = await prisma.booking.findMany({
+    // Get user's business
+    const member = await prisma.businessMember.findFirst({
       where: {
-        businessId,
+        userId: session.user.id,
+        status: 'active',
       },
-      orderBy: {
-        date: 'desc',
+      select: {
+        businessId: true,
       },
     });
 
-    return NextResponse.json({ bookings });
+    if (!member) {
+      return NextResponse.json({ bookings: [] }, { status: 200 });
+    }
+
+    // Get all bookings for this business
+    const bookings = await prisma.booking.findMany({
+      where: {
+        businessId: member.businessId,
+      },
+      include: {
+        serviceDetail: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        payment: {
+          select: {
+            id: true,
+            method: true,
+            status: true,
+            proofUrl: true,
+            amount: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    // Transform to match frontend expectation
+    const transformedBookings = bookings.map(booking => ({
+      ...booking,
+      service: booking.serviceDetail || { id: '', name: booking.service },
+      bookingDate: booking.date.toISOString().split('T')[0],
+      bookingTime: booking.time,
+    }));
+
+    return NextResponse.json({ bookings: transformedBookings });
   } catch (error) {
     console.error('Get bookings error:', error);
     return NextResponse.json(

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 
 interface AdminLayoutWrapperProps {
   children: React.ReactNode;
@@ -11,14 +12,36 @@ interface AdminLayoutWrapperProps {
 
 export default function AdminLayoutWrapper({ children, businessSlug }: AdminLayoutWrapperProps) {
   const pathname = usePathname();
+  const { data: session, status } = useSession();
+  const [isOwner, setIsOwner] = useState(false);
 
-  // TODO: Replace with real auth check from session/context
-  // Check if logged in user is the owner of this business
-  const isOwner = true; // This should check: currentUser.businessSlug === businessSlug
-  const currentUserSlug = 'komet'; // Get from auth session
+  useEffect(() => {
+    // Check if logged in user has policy access to this business
+    async function checkAccess() {
+      if (!session?.user?.id) {
+        setIsOwner(false);
+        return;
+      }
 
-  // If not owner, just show the content without admin layout
-  if (!isOwner || currentUserSlug !== businessSlug) {
+      try {
+        const response = await fetch(`/api/business/${businessSlug}/check-member`);
+        const data = await response.json();
+        setIsOwner(data.hasAccess || false);
+      } catch (error) {
+        console.error('Error checking access:', error);
+        setIsOwner(false);
+      }
+    }
+
+    checkAccess();
+  }, [session, businessSlug]);
+
+  // If not logged in or not owner, just show the content without admin layout
+  if (status === 'loading') {
+    return <>{children}</>;
+  }
+
+  if (!session || !isOwner) {
     return <>{children}</>;
   }
 

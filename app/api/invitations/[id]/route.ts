@@ -1,4 +1,199 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { createBusinessMember, MemberRole } from '@/lib/pbac';
+
+/**
+ * GET /api/invitations/[id]
+ * Mendapatkan detail invitation berdasarkan token
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: token } = await params;
+
+    const invitation = await prisma.invitation.findUnique({
+      where: { token },
+      include: {
+        business: {
+          select: {
+            name: true,
+            slug: true,
+          },
+        },
+        inviter: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!invitation) {
+      return NextResponse.json(
+        { error: 'Undangan tidak ditemukan' },
+        { status: 404 }
+      );
+    }
+
+    // Check if expired
+    if (new Date() > invitation.expiresAt) {
+      return NextResponse.json(
+        { error: 'Undangan sudah kadaluarsa' },
+        { status: 400 }
+      );
+    }
+
+    // Check if already accepted/rejected
+    if (invitation.status !== 'pending') {
+      return NextResponse.json(
+        { error: `Undangan sudah ${invitation.status}` },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: invitation,
+    });
+  } catch (error) {
+    console.error('Error fetching invitation:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan saat mengambil data undangan' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST /api/invitations/[id]/accept
+ * Accept atau reject invitation
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: token } = await params;
+    const { action, userId } = await request.json(); // action: 'accept' | 'reject', userId from session
+
+    if (!action || !['accept', 'reject'].includes(action)) {
+      return NextResponse.json(
+        { error: 'Action harus "accept" atau "reject"' },
+        { status: 400 }
+      );
+    }
+
+    if (action === 'accept' && !userId) {
+      return NextResponse.json(
+        { error: 'User ID harus disertakan untuk accept invitation' },
+        { status: 400 }
+      );
+    }
+
+    // Get invitation
+    const invitation = await prisma.invitation.findUnique({
+      where: { token },
+    });
+
+    if (!invitation) {
+      return NextResponse.json(
+        { error: 'Undangan tidak ditemukan' },
+        { status: 404 }
+      );
+    }
+
+    // Validasi
+    if (new Date() > invitation.expiresAt) {
+      await prisma.invitation.update({
+        where: { id: invitation.id },
+        data: { status: 'expired' },
+      });
+
+      return NextResponse.json(
+        { error: 'Undangan sudah kadaluarsa' },
+        { status: 400 }
+      );
+    }
+
+    if (invitation.status !== 'pending') {
+      return NextResponse.json(
+        { error: `Undangan sudah ${invitation.status}` },
+        { status: 400 }
+      );
+    }
+
+    if (action === 'accept') {
+      // Accept invitation - create business member
+      await prisma.$transaction(async (tx) => {
+        // Create business member with role from invitation
+        await createBusinessMember(
+          userId,
+          invitation.businessId,
+          invitation.role as MemberRole,
+          invitation.invitedBy
+        );
+
+        // Update invitation status
+        await tx.invitation.update({
+          where: { id: invitation.id },
+          data: {
+            status: 'accepted',
+            acceptedAt: new Date(),
+          },
+        });
+
+        // Create audit log
+        await tx.auditLog.create({
+          data: {
+            userId,
+            businessId: invitation.businessId,
+            action: 'accept_invitation',
+            entityType: 'invitation',
+            entityId: invitation.id,
+            metadata: {
+              email: invitation.email,
+              role: invitation.role,
+            },
+          },
+        });
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Undangan berhasil diterima',
+        data: {
+          id: invitation.id,
+          status: 'accepted',
+          businessId: invitation.businessId,
+        },
+      });
+    } else {
+      // Reject invitation
+      await prisma.invitation.update({
+        where: { id: invitation.id },
+        data: { status: 'rejected' },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Undangan ditolak',
+        data: {
+          id: invitation.id,
+          status: 'rejected',
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Error processing invitation:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan saat memproses undangan' },
+      { status: 500 }
+    );
+  }
+}
 
 /**
  * DELETE /api/invitations/[id]
@@ -11,52 +206,29 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    if (!id) {
+    // TODO: Verify user has permission to cancel this invitation
+
+    const invitation = await prisma.invitation.findUnique({
+      where: { id },
+    });
+
+    if (!invitation) {
       return NextResponse.json(
-        { error: 'ID undangan tidak valid' },
+        { error: 'Undangan tidak ditemukan' },
+        { status: 404 }
+      );
+    }
+
+    if (invitation.status !== 'pending') {
+      return NextResponse.json(
+        { error: 'Hanya undangan pending yang dapat dibatalkan' },
         { status: 400 }
       );
     }
 
-    // TODO: Implementasi berikut:
-    // 1. Get current user dari session
-    // 2. Cek apakah invitation ada dan milik business user ini
-    // 3. Cek apakah invitation masih pending (tidak bisa cancel jika sudah accepted)
-    // 4. Delete atau update status invitation menjadi 'cancelled'
-
-    // Contoh:
-    // const session = await getServerSession();
-    // if (!session?.user) {
-    //   return NextResponse.json(
-    //     { error: 'Unauthorized' },
-    //     { status: 401 }
-    //   );
-    // }
-    //
-    // const invitation = await prisma.invitation.findFirst({
-    //   where: {
-    //     id,
-    //     businessId: session.user.businessId,
-    //   },
-    // });
-    //
-    // if (!invitation) {
-    //   return NextResponse.json(
-    //     { error: 'Undangan tidak ditemukan' },
-    //     { status: 404 }
-    //   );
-    // }
-    //
-    // if (invitation.status !== 'pending') {
-    //   return NextResponse.json(
-    //     { error: 'Hanya undangan pending yang dapat dibatalkan' },
-    //     { status: 400 }
-    //   );
-    // }
-    //
-    // await prisma.invitation.delete({
-    //   where: { id },
-    // });
+    await prisma.invitation.delete({
+      where: { id },
+    });
 
     return NextResponse.json({
       success: true,
@@ -66,83 +238,6 @@ export async function DELETE(
     console.error('Error cancelling invitation:', error);
     return NextResponse.json(
       { error: 'Terjadi kesalahan saat membatalkan undangan' },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * GET /api/invitations/[id]
- * Mendapatkan detail undangan berdasarkan ID atau token
- */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'ID undangan tidak valid' },
-        { status: 400 }
-      );
-    }
-
-    // TODO: Implementasi berikut:
-    // 1. Get invitation by ID atau token
-    // 2. Cek apakah invitation masih valid (belum expired)
-    // 3. Return detail invitation termasuk business info
-
-    // Contoh:
-    // const invitation = await prisma.invitation.findUnique({
-    //   where: { id },
-    //   include: {
-    //     business: {
-    //       select: {
-    //         name: true,
-    //         subdomain: true,
-    //       },
-    //     },
-    //   },
-    // });
-    //
-    // if (!invitation) {
-    //   return NextResponse.json(
-    //     { error: 'Undangan tidak ditemukan' },
-    //     { status: 404 }
-    //   );
-    // }
-    //
-    // if (new Date() > invitation.expiresAt) {
-    //   return NextResponse.json(
-    //     { error: 'Undangan sudah kadaluarsa' },
-    //     { status: 400 }
-    //   );
-    // }
-
-    // Dummy data untuk testing
-    const dummyInvitation = {
-      id,
-      email: 'newuser@example.com',
-      role: 'admin',
-      status: 'pending',
-      invitedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      business: {
-        name: 'Komet Barbershop',
-        subdomain: 'komet',
-      },
-    };
-
-    return NextResponse.json({
-      success: true,
-      data: dummyInvitation,
-    });
-  } catch (error) {
-    console.error('Error fetching invitation:', error);
-    return NextResponse.json(
-      { error: 'Terjadi kesalahan saat mengambil detail undangan' },
       { status: 500 }
     );
   }

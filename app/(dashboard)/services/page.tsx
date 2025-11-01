@@ -1,69 +1,150 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 
 type Service = {
   id: string;
   name: string;
-  description: string;
   duration: string;
   price: number;
   isActive: boolean;
 };
 
 export default function ServicesPage() {
-  // Dummy data - akan diganti dengan data dari API
-  const [services, setServices] = useState<Service[]>([
-    {
-      id: '1',
-      name: 'Haircut Classic',
-      description: 'Potong rambut klasik dengan teknik profesional',
-      duration: '30 menit',
-      price: 50000,
-      isActive: true,
-    },
-    {
-      id: '2',
-      name: 'Premium Haircut',
-      description: 'Potong rambut premium dengan styling modern',
-      duration: '45 menit',
-      price: 100000,
-      isActive: true,
-    },
-    {
-      id: '3',
-      name: 'Haircut + Styling',
-      description: 'Potong rambut + styling sesuai wajah',
-      duration: '60 menit',
-      price: 75000,
-      isActive: true,
-    },
-    {
-      id: '4',
-      name: 'Hair Coloring',
-      description: 'Pewarnaan rambut dengan produk berkualitas',
-      duration: '90 menit',
-      price: 150000,
-      isActive: false,
-    },
-  ]);
-
+  const { data: session } = useSession();
+  const [services, setServices] = useState<Service[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    duration: '',
+    price: '',
+  });
 
-  const handleToggleActive = (id: string) => {
-    setServices(
-      services.map((service) =>
-        service.id === id ? { ...service, isActive: !service.isActive } : service
-      )
-    );
-  };
+  useEffect(() => {
+    let isMounted = true;
 
-  const handleDelete = (id: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus layanan ini?')) {
-      setServices(services.filter((service) => service.id !== id));
+    // Fetch services from API
+    async function fetchServices() {
+      if (!session?.user?.id) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/services');
+        const data = await response.json();
+
+        if (isMounted && data.services) {
+          setServices(data.services);
+        }
+      } catch (error) {
+        console.error('Error fetching services:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    fetchServices();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user?.id]);
+
+  const handleToggleActive = async (id: string) => {
+    const service = services.find(s => s.id === id);
+    if (!service) return;
+
+    try {
+      const response = await fetch(`/api/services/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !service.isActive }),
+      });
+
+      if (response.ok) {
+        setServices(
+          services.map((s) =>
+            s.id === id ? { ...s, isActive: !s.isActive } : s
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error toggling service:', error);
+      alert('Gagal mengubah status layanan');
     }
   };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus layanan ini?')) return;
+
+    try {
+      const response = await fetch(`/api/services/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setServices(services.filter((service) => service.id !== id));
+      }
+    } catch (error) {
+      console.error('Error deleting service:', error);
+      alert('Gagal menghapus layanan');
+    }
+  };
+
+  const handleAddService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch('/api/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          duration: formData.duration,
+          price: parseFloat(formData.price),
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setServices([...services, data.service]);
+        setFormData({ name: '', duration: '', price: '' });
+        setShowAddForm(false);
+      } else {
+        alert('Gagal menambahkan layanan');
+      }
+    } catch (error) {
+      console.error('Error adding service:', error);
+      alert('Gagal menambahkan layanan');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="bg-zinc-50 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-zinc-600">Memuat layanan...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-zinc-50 min-h-screen">
@@ -94,7 +175,9 @@ export default function ServicesPage() {
           </div>
           <div className="bg-white rounded-xl p-4 border-2 border-zinc-200">
             <div className="text-2xl font-bold text-purple-600">
-              Rp {Math.min(...services.map((s) => s.price)).toLocaleString('id-ID')}
+              {services.length > 0
+                ? `Rp ${Math.min(...services.map((s) => s.price)).toLocaleString('id-ID')}`
+                : '-'}
             </div>
             <div className="text-sm text-zinc-600">Harga Terendah</div>
           </div>
@@ -109,9 +192,91 @@ export default function ServicesPage() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
             </svg>
-            Tambah Layanan Baru
+            {showAddForm ? 'Tutup Form' : 'Tambah Layanan Baru'}
           </button>
         </div>
+
+        {/* Add Service Form */}
+        {showAddForm && (
+          <div className="bg-white rounded-xl p-6 border-2 border-purple-200 mb-6">
+            <h2 className="text-xl font-bold text-zinc-900 mb-4">Tambah Layanan Baru</h2>
+            <form onSubmit={handleAddService} className="space-y-4">
+              {/* Name */}
+              <div>
+                <label htmlFor="name" className="block text-sm font-semibold text-zinc-700 mb-2">
+                  Nama Layanan <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  name="name"
+                  required
+                  value={formData.name}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border-2 border-zinc-300 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all"
+                  placeholder="Contoh: Haircut Classic"
+                />
+              </div>
+
+              {/* Duration and Price */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Duration */}
+                <div>
+                  <label htmlFor="duration" className="block text-sm font-semibold text-zinc-700 mb-2">
+                    Durasi <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="duration"
+                    name="duration"
+                    required
+                    value={formData.duration}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border-2 border-zinc-300 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all"
+                    placeholder="Contoh: 30 menit"
+                  />
+                </div>
+
+                {/* Price */}
+                <div>
+                  <label htmlFor="price" className="block text-sm font-semibold text-zinc-700 mb-2">
+                    Harga (Rp) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    id="price"
+                    name="price"
+                    required
+                    min="0"
+                    step="1000"
+                    value={formData.price}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border-2 border-zinc-300 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all"
+                    placeholder="50000"
+                  />
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="flex-1 px-6 py-3 border-2 border-zinc-300 text-zinc-700 font-semibold rounded-xl hover:bg-zinc-50 transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Menyimpan...' : 'Simpan Layanan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {/* Services List */}
         <div className="space-y-4">
@@ -139,7 +304,6 @@ export default function ServicesPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-zinc-600 mb-3">{service.description}</p>
                   <div className="flex items-center gap-4 text-sm">
                     <div className="flex items-center gap-2 text-zinc-600">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

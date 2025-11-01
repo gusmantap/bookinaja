@@ -1,19 +1,42 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const [businessData, setBusinessData] = useState<{ slug: string; name: string } | null>(null);
 
-  // Check if user is owner (TODO: Replace with real auth check)
-  const isOwner = true; // This should come from auth context/session
-  const slug = 'komet'; // TODO: Get from session/auth
+  useEffect(() => {
+    let isMounted = true;
 
-  if (!isOwner) {
-    return <>{children}</>;
-  }
+    // Fetch user's business data
+    async function fetchBusiness() {
+      if (!session?.user?.id) return;
+
+      try {
+        const response = await fetch('/api/user/business');
+        const data = await response.json();
+        if (isMounted && data.business) {
+          setBusinessData({
+            slug: data.business.slug,
+            name: data.business.name,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching business:', error);
+      }
+    }
+
+    fetchBusiness();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user?.id]);
 
   // Check if current route is in settings
   const isSettingsActive = pathname?.startsWith('/settings');
@@ -28,26 +51,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex items-center gap-3">
               <div>
                 <h1 className="text-lg sm:text-xl font-bold text-zinc-900">Bookinaja</h1>
-                <p className="text-xs text-zinc-500 hidden sm:block">Komet Barbershop</p>
+                <p className="text-xs text-zinc-500 hidden sm:block">{businessData?.name || 'Loading...'}</p>
               </div>
             </div>
 
             {/* Right: Action Buttons */}
             <div className="flex items-center gap-2">
               {/* Preview Website Button */}
-              <Link
-                href={`/${slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium text-sm hover:from-blue-700 hover:to-purple-700 transition-all shadow-sm"
-                title="Preview website publik"
-              >
+              {businessData && (
+                <Link
+                  href={`/${businessData.slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium text-sm hover:from-blue-700 hover:to-purple-700 transition-all shadow-sm"
+                  title="Preview website publik"
+                >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                 </svg>
                 <span className="hidden sm:inline">Preview</span>
               </Link>
+              )}
             </div>
           </div>
         </div>

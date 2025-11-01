@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 export default function OnboardingStep1() {
   const router = useRouter();
   const [subdomain, setSubdomain] = useState('');
+  const [slugError, setSlugError] = useState('');
+  const [isCheckingSlug, setIsCheckingSlug] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     bio: '',
@@ -26,14 +29,50 @@ export default function OnboardingStep1() {
     }
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setSlugError('');
 
-    // Save to sessionStorage
-    sessionStorage.setItem('onboarding_step1', JSON.stringify(formData));
+    try {
+      // Check slug availability
+      const response = await fetch('/api/check-slug', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ slug: subdomain }),
+      });
 
-    // Navigate to step 2
-    router.push('/onboarding/step2');
+      const data = await response.json();
+
+      if (!data.available) {
+        setSlugError(data.message || 'URL sudah digunakan');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Save to sessionStorage
+      sessionStorage.setItem('onboarding_subdomain', subdomain);
+      sessionStorage.setItem('onboarding_step1', JSON.stringify(formData));
+
+      // Navigate to step 2
+      router.push('/onboarding/step2');
+    } catch (error) {
+      console.error('Error checking slug:', error);
+      setSlugError('Terjadi kesalahan saat mengecek URL');
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSubdomainChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Convert to lowercase and remove spaces/special chars
+    const value = e.target.value
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    setSubdomain(value);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -77,6 +116,41 @@ export default function OnboardingStep1() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Subdomain/Slug */}
+            <div>
+              <label htmlFor="subdomain" className="block text-sm font-semibold text-zinc-700 mb-2">
+                URL Bisnis Anda <span className="text-red-500">*</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-500 text-sm">{process.env.NEXT_PUBLIC_HOST?.replace(/^https?:\/\//, '') || 'localhost:3000'}/</span>
+                <input
+                  type="text"
+                  name="subdomain"
+                  id="subdomain"
+                  required
+                  minLength={3}
+                  maxLength={50}
+                  value={subdomain}
+                  onChange={handleSubdomainChange}
+                  className="flex-1 px-4 py-3 border-2 border-zinc-300 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                  placeholder="komet-barbershop"
+                />
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">
+                Hanya huruf kecil, angka, dan tanda hubung (-). Minimal 3 karakter.
+              </p>
+              {slugError && (
+                <p className="text-sm text-red-600 mt-2 font-medium">
+                  ❌ {slugError}
+                </p>
+              )}
+              {subdomain && !slugError && (
+                <p className="text-sm text-blue-600 mt-2 font-medium">
+                  ✓ Preview: {process.env.NEXT_PUBLIC_HOST?.replace(/^https?:\/\//, '') || 'localhost:3000'}/{subdomain}
+                </p>
+              )}
+            </div>
+
             {/* Business Name */}
             <div>
               <label htmlFor="name" className="block text-sm font-semibold text-zinc-700 mb-2">
@@ -189,15 +263,17 @@ export default function OnboardingStep1() {
               <button
                 type="button"
                 onClick={() => router.push('/')}
-                className="px-6 py-3 border-2 border-zinc-300 text-zinc-700 font-semibold rounded-xl hover:bg-zinc-50 transition-all"
+                disabled={isSubmitting}
+                className="px-6 py-3 border-2 border-zinc-300 text-zinc-700 font-semibold rounded-xl hover:bg-zinc-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Batal
               </button>
               <button
                 type="submit"
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+                disabled={isSubmitting}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Lanjut ke Step 2 →
+                {isSubmitting ? 'Mengecek URL...' : 'Lanjut ke Step 2 →'}
               </button>
             </div>
           </form>

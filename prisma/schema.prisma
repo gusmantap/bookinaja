@@ -13,16 +13,25 @@ datasource db {
 
 // NextAuth Models
 model User {
-  id            String     @id @default(cuid())
-  email         String     @unique
-  name          String?
-  image         String?
-  emailVerified DateTime?
-  businesses    Business[]
-  accounts      Account[]
-  sessions      Session[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id                   String           @id @default(cuid())
+  email                String           @unique
+  name                 String?
+  password             String?          // Hashed password (nullable untuk OAuth users)
+  image                String?
+  emailVerified        DateTime?
+  onboardingCompleted  Boolean          @default(false)
+
+  // Relations
+  accounts             Account[]
+  sessions             Session[]
+  businessMemberships  BusinessMember[]
+  bookings             Booking[]
+  sentInvitations      Invitation[]     @relation("InvitedBy")
+  invitedMembers       BusinessMember[] @relation("InvitedMembers")
+  auditLogs            AuditLog[]
+
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
   @@map("users")
 }
@@ -67,10 +76,10 @@ model VerificationToken {
 
 // Business Models
 model Business {
-  id              String    @id @default(cuid())
-  slug            String    @unique
+  id              String           @id @default(cuid())
+  slug            String           @unique
   name            String
-  bio             String?   @db.Text
+  bio             String?          @db.Text
   phone           String
   address         String
   email           String?
@@ -80,55 +89,184 @@ model Business {
   accountNumber   String?
   accountName     String?
   operatingHours  Json?
-  theme           String    @default("default")
-  ownerId         String
-  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  theme           String           @default("default")
+  photos          String[]         @default([])
+
+  // Relations
+  members         BusinessMember[]
   services        Service[]
   bookings        Booking[]
-  photos          String[]  @default([])
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  invitations     Invitation[]
+  auditLogs       AuditLog[]
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([slug])
-  @@index([ownerId])
   @@map("businesses")
 }
 
 model Service {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
-  price       Int
+  price       Float
   duration    String
+  isActive    Boolean   @default(true)
   businessId  String
-  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  bookings    Booking[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([businessId])
+  @@index([isActive])
   @@map("services")
 }
 
 model Booking {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   customerName    String
   customerPhone   String
   customerEmail   String?
   service         String
-  price           Int
+  price           Float
   date            DateTime
   time            String
   duration        String
-  status          String   @default("pending") // pending, confirmed, completed, cancelled
-  notes           String?  @db.Text
-  paymentMethod   String   @default("onsite") // onsite, transfer
-  paymentProofUrl String?  // Supabase Storage URL
+  status          String    @default("pending") // pending, confirmed, completed, cancelled
+  notes           String?   @db.Text
+
+  // Relations
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  serviceId       String?
+  serviceDetail   Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   businessId      String
-  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  payment         Payment?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([businessId])
+  @@index([userId])
+  @@index([serviceId])
   @@index([date])
   @@index([status])
   @@map("bookings")
+}
+
+// PBAC Models
+model BusinessMember {
+  id         String         @id @default(cuid())
+  userId     String
+  businessId String
+  role       String         @default("member") // 'owner', 'admin', 'staff', 'member' - for display only
+  status     String         @default("active") // 'active', 'suspended', 'left'
+
+  // Relations
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  policies   MemberPolicy[]
+
+  invitedBy  String?
+  inviter    User?          @relation("InvitedMembers", fields: [invitedBy], references: [id], onDelete: SetNull)
+
+  joinedAt   DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+  @@index([userId])
+  @@index([status])
+  @@map("business_members")
+}
+
+model MemberPolicy {
+  id               String         @id @default(cuid())
+  businessMemberId String
+  feature          String         // 'bookings', 'services', 'settings', 'members', 'payments', 'analytics'
+  access           String         // 'disabled', 'read', 'write'
+
+  // Relations
+  member           BusinessMember @relation(fields: [businessMemberId], references: [id], onDelete: Cascade)
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([businessMemberId, feature])
+  @@index([businessMemberId])
+  @@map("member_policies")
+}
+
+model Invitation {
+  id         String    @id @default(cuid())
+  email      String
+  businessId String
+  role       String    // 'admin', 'staff', 'member'
+  token      String    @unique
+  status     String    @default("pending") // 'pending', 'accepted', 'expired', 'rejected'
+
+  // Relations
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invitedBy  String
+  inviter    User      @relation("InvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  expiresAt  DateTime
+  acceptedAt DateTime?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([businessId])
+  @@index([email])
+  @@index([status])
+  @@index([token])
+  @@map("invitations")
+}
+
+model Payment {
+  id        String    @id @default(cuid())
+  bookingId String    @unique
+  amount    Float
+  method    String    // 'cash', 'transfer', 'qris', 'other'
+  status    String    @default("pending") // 'pending', 'paid', 'refunded', 'failed'
+  proofUrl  String?
+  notes     String?   @db.Text
+
+  // Relations
+  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  paidAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([status])
+  @@index([method])
+  @@map("payments")
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  userId     String
+  businessId String?
+  action     String    // 'invite_member', 'remove_member', 'update_booking', etc
+  entityType String    // 'booking', 'business', 'member', etc
+  entityId   String
+  metadata   Json?
+  ipAddress  String?
+
+  // Relations
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([businessId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
