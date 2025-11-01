@@ -10,6 +10,7 @@ type ServiceInput = {
 
 type OnboardingRequest = {
   subdomain: string;
+  category?: string;
   name: string;
   bio: string;
   phone: string;
@@ -18,6 +19,7 @@ type OnboardingRequest = {
   instagram?: string;
   services: ServiceInput[];
   operatingHours: any;
+  theme?: string;
   userId: string; // User ID dari session
 };
 
@@ -29,6 +31,7 @@ export async function POST(request: NextRequest) {
 
     const {
       subdomain,
+      category,
       name,
       bio,
       phone,
@@ -37,6 +40,7 @@ export async function POST(request: NextRequest) {
       instagram,
       services,
       operatingHours,
+      theme,
       userId,
     } = body;
 
@@ -74,6 +78,7 @@ export async function POST(request: NextRequest) {
       const business = await tx.business.create({
         data: {
           slug: subdomain,
+          category: category || null,
           name,
           bio,
           phone,
@@ -82,6 +87,7 @@ export async function POST(request: NextRequest) {
           instagram,
           whatsapp: phone, // Default whatsapp = phone
           operatingHours: operatingHours || {},
+          theme: theme || 'default',
         },
       });
 

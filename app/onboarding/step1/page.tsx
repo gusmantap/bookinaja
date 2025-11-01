@@ -10,6 +10,7 @@ export default function OnboardingStep1() {
   const [isCheckingSlug, setIsCheckingSlug] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
+    category: '',
     name: '',
     bio: '',
     phone: '',
@@ -33,6 +34,13 @@ export default function OnboardingStep1() {
     e.preventDefault();
     setIsSubmitting(true);
     setSlugError('');
+
+    // Validate category
+    if (!formData.category) {
+      setSlugError('Silakan pilih kategori bisnis terlebih dahulu');
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       // Check slug availability
@@ -88,13 +96,13 @@ export default function OnboardingStep1() {
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-blue-600">Step 1 of 3</span>
-            <span className="text-sm font-medium text-zinc-600">33%</span>
+            <span className="text-sm font-medium text-blue-600">Step 1 of 4</span>
+            <span className="text-sm font-medium text-zinc-600">25%</span>
           </div>
           <div className="h-2 bg-zinc-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-blue-600 to-purple-600 rounded-full transition-all"
-              style={{ width: '33%' }}
+              style={{ width: '25%' }}
             />
           </div>
         </div>
@@ -149,6 +157,44 @@ export default function OnboardingStep1() {
                   ✓ Preview: {process.env.NEXT_PUBLIC_HOST?.replace(/^https?:\/\//, '') || 'localhost:3000'}/{subdomain}
                 </p>
               )}
+            </div>
+
+            {/* Category Selector */}
+            <div>
+              <label htmlFor="category" className="block text-sm font-semibold text-zinc-700 mb-2">
+                Kategori Bisnis <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {[
+                  { value: 'barbershop', label: 'Barbershop', icon: '✂️' },
+                  { value: 'salon-wanita', label: 'Salon Wanita', icon: '💇‍♀️' },
+                  { value: 'spa', label: 'Spa & Massage', icon: '💆' },
+                  { value: 'cafe', label: 'Cafe & Restaurant', icon: '☕' },
+                  { value: 'nail-art', label: 'Nail Art', icon: '💅' },
+                  { value: 'photobooth', label: 'Photobooth', icon: '📸' },
+                ].map((cat) => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, category: cat.value })}
+                    className={`p-4 rounded-xl border-2 transition-all text-left ${
+                      formData.category === cat.value
+                        ? 'border-blue-500 bg-blue-50 shadow-md'
+                        : 'border-zinc-200 hover:border-blue-300 hover:bg-zinc-50'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">{cat.icon}</div>
+                    <div className={`text-sm font-semibold ${
+                      formData.category === cat.value ? 'text-blue-700' : 'text-zinc-700'
+                    }`}>
+                      {cat.label}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-zinc-500 mt-2">
+                Kategori akan membantu kami menyarankan tema yang cocok untuk bisnis Anda
+              </p>
             </div>
 
             {/* Business Name */}

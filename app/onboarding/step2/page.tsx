@@ -86,13 +86,13 @@ export default function OnboardingStep2() {
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-blue-600">Step 2 of 3</span>
-            <span className="text-sm font-medium text-zinc-600">67%</span>
+            <span className="text-sm font-medium text-blue-600">Step 2 of 4</span>
+            <span className="text-sm font-medium text-zinc-600">50%</span>
           </div>
           <div className="h-2 bg-zinc-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-blue-600 to-purple-600 rounded-full transition-all"
-              style={{ width: '67%' }}
+              style={{ width: '50%' }}
             />
           </div>
         </div>

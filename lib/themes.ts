@@ -247,3 +247,13 @@ export function getTheme(slug: string): Theme {
 export function getThemeByName(themeName: string): Theme {
   return themes[themeName] || themes.default;
 }
+
+// Get all themes as array
+export function getAllThemes(): Theme[] {
+  return Object.values(themes);
+}
+
+// Get themes by category
+export function getThemesByCategory(category: string): Theme[] {
+  return Object.values(themes).filter(theme => theme.category === category);
+}

@@ -1,7 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { getThemesByCategory } from '@/lib/themes';
 
 interface AdminLayoutWrapperProps {
   children: React.ReactNode;
@@ -11,11 +13,71 @@ interface AdminLayoutWrapperProps {
 
 export default function AdminLayoutWrapper({ children, businessSlug, isOwner }: AdminLayoutWrapperProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [showThemeDropdown, setShowThemeDropdown] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState('default');
+  const [category, setCategory] = useState<string>('');
+  const [isChangingTheme, setIsChangingTheme] = useState(false);
 
   // If not owner, just show the content without admin layout
   if (!isOwner) {
     return <>{children}</>;
   }
+
+  // Fetch business data to get current theme and category
+  useEffect(() => {
+    async function fetchBusinessData() {
+      try {
+        const response = await fetch(`/api/business/${businessSlug}/theme`);
+        const data = await response.json();
+        if (data.theme) setCurrentTheme(data.theme);
+        if (data.category) setCategory(data.category);
+      } catch (error) {
+        console.error('Error fetching business data:', error);
+      }
+    }
+    fetchBusinessData();
+  }, [businessSlug]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showThemeDropdown && !target.closest('.theme-dropdown-container')) {
+        setShowThemeDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showThemeDropdown]);
+
+  const recommendedThemes = category ? getThemesByCategory(category) : [];
+
+  const handleThemeChange = async (themeName: string) => {
+    setIsChangingTheme(true);
+    try {
+      const response = await fetch(`/api/business/${businessSlug}/theme`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: themeName }),
+      });
+
+      if (response.ok) {
+        setCurrentTheme(themeName);
+        setShowThemeDropdown(false);
+        // Refresh page to apply new theme
+        router.refresh();
+      } else {
+        alert('Gagal mengubah tema');
+      }
+    } catch (error) {
+      console.error('Error changing theme:', error);
+      alert('Terjadi kesalahan');
+    } finally {
+      setIsChangingTheme(false);
+    }
+  };
 
   // Check if current route is in settings
   const isSettingsActive = pathname?.startsWith('/settings');
@@ -37,16 +99,85 @@ export default function AdminLayoutWrapper({ children, businessSlug, isOwner }: 
 
             {/* Right: Action Buttons */}
             <div className="flex items-center gap-2">
-              {/* Back to Dashboard Button */}
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium text-sm hover:from-blue-700 hover:to-purple-700 transition-all shadow-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-                </svg>
-                <span className="hidden sm:inline">Dashboard</span>
-              </Link>
+              {/* Theme Switcher Dropdown */}
+              <div className="relative theme-dropdown-container">
+                <button
+                  onClick={() => setShowThemeDropdown(!showThemeDropdown)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-medium text-sm hover:from-purple-700 hover:to-pink-700 transition-all shadow-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                  </svg>
+                  <span>Ganti Tema</span>
+                  <svg className={`w-4 h-4 transition-transform ${showThemeDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Dropdown Menu */}
+                {showThemeDropdown && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border-2 border-zinc-200 z-50 max-h-[70vh] overflow-y-auto">
+                    <div className="p-4">
+                      {/* Category-specific Themes Only */}
+                      {recommendedThemes.length > 0 ? (
+                        <div>
+                          <h3 className="text-xs font-bold text-zinc-500 uppercase mb-3">
+                            Tema untuk {category?.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                          </h3>
+                          <div className="space-y-2">
+                            {recommendedThemes.map((theme) => (
+                              <button
+                                key={theme.name}
+                                onClick={() => handleThemeChange(theme.name)}
+                                disabled={isChangingTheme}
+                                className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
+                                  currentTheme === theme.name
+                                    ? 'border-purple-500 bg-purple-50'
+                                    : 'border-zinc-200 hover:border-purple-300 hover:bg-zinc-50'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className={`text-sm font-semibold ${
+                                    currentTheme === theme.name ? 'text-purple-700' : 'text-zinc-900'
+                                  }`}>
+                                    {theme.name.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                  </span>
+                                  {currentTheme === theme.name && (
+                                    <span className="text-purple-600 text-xs font-bold">✓ AKTIF</span>
+                                  )}
+                                </div>
+                                {/* Theme Preview */}
+                                <div className="flex gap-1">
+                                  <div className={`flex-1 h-3 ${theme.headerGradient} rounded`}></div>
+                                  <div className={`flex-1 h-3 ${theme.buttonGradient} rounded`}></div>
+                                  <div className={`w-8 h-3 bg-${theme.accentColor}-500 rounded`}></div>
+                                </div>
+                                {/* Style Info */}
+                                <div className="mt-2 flex gap-1">
+                                  <span className="px-2 py-0.5 bg-zinc-100 text-zinc-600 rounded text-[10px]">
+                                    {theme.borderRadius}
+                                  </span>
+                                  <span className="px-2 py-0.5 bg-zinc-100 text-zinc-600 rounded text-[10px]">
+                                    {theme.fontWeight}
+                                  </span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <div className="text-4xl mb-2">🎨</div>
+                          <p className="text-sm text-zinc-600 font-medium">Tidak ada tema tersedia</p>
+                          <p className="text-xs text-zinc-500 mt-1">
+                            Kategori bisnis belum diset atau tidak memiliki tema
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

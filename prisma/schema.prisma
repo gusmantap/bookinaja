@@ -79,6 +79,7 @@ model Business {
   id              String           @id @default(cuid())
   slug            String           @unique
   name            String
+  category        String?          // 'barbershop', 'salon-wanita', 'spa', 'cafe', 'nail-art', 'photobooth'
   bio             String?          @db.Text
   phone           String
   address         String

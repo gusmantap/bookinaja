@@ -93,63 +93,11 @@ export default function OnboardingStep3() {
       // Save to sessionStorage
       sessionStorage.setItem('onboarding_step3', JSON.stringify(operatingHours));
 
-      // Get all data from sessionStorage
-      const subdomain = sessionStorage.getItem('onboarding_subdomain');
-      const step1Data = sessionStorage.getItem('onboarding_step1');
-      const step2Data = sessionStorage.getItem('onboarding_step2');
-
-      if (!subdomain || !step1Data || !step2Data) {
-        alert('Data onboarding tidak lengkap. Mulai dari awal.');
-        router.push('/');
-        return;
-      }
-
-      if (!session?.user?.id) {
-        alert('Session tidak ditemukan. Silakan login kembali.');
-        router.push('/login');
-        return;
-      }
-
-      const businessData = {
-        subdomain,
-        ...JSON.parse(step1Data),
-        services: JSON.parse(step2Data),
-        operatingHours,
-        userId: session.user.id,
-      };
-
-      // Call API endpoint to create business
-      const response = await fetch('/api/onboarding', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(businessData),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Gagal membuat bisnis');
-      }
-
-      // Update session to mark onboarding as completed
-      await update({
-        onboardingCompleted: true,
-      });
-
-      // Clear sessionStorage
-      sessionStorage.removeItem('onboarding_subdomain');
-      sessionStorage.removeItem('onboarding_step1');
-      sessionStorage.removeItem('onboarding_step2');
-      sessionStorage.removeItem('onboarding_step3');
-
-      // Redirect to business public page
-      router.push(`/${data.data.slug}`);
+      // Navigate to step 4 (theme selection)
+      router.push('/onboarding/step4');
     } catch (error) {
       console.error('Error:', error);
       alert('Terjadi kesalahan. Coba lagi.');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -160,13 +108,13 @@ export default function OnboardingStep3() {
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-blue-600">Step 3 of 3</span>
-            <span className="text-sm font-medium text-zinc-600">100%</span>
+            <span className="text-sm font-medium text-blue-600">Step 3 of 4</span>
+            <span className="text-sm font-medium text-zinc-600">75%</span>
           </div>
           <div className="h-2 bg-zinc-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-blue-600 to-purple-600 rounded-full transition-all"
-              style={{ width: '100%' }}
+              style={{ width: '75%' }}
             />
           </div>
         </div>
