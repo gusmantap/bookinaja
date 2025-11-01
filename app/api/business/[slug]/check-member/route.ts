@@ -17,41 +17,41 @@ export async function GET(
       );
     }
 
-    // Check if user has policy access to this business
-    const business = await prisma.business.findUnique({
-      where: { slug },
-      include: {
-        members: {
-          where: {
-            userId: session.user.id,
-            status: 'active',
-          },
-          include: {
-            policies: true, // Include policies to check access
+    // Optimized: Direct member lookup instead of fetching entire business
+    const member = await prisma.businessMember.findFirst({
+      where: {
+        userId: session.user.id,
+        status: 'active',
+        business: {
+          slug: slug,
+        },
+      },
+      select: {
+        id: true,
+        role: true,
+        _count: {
+          select: {
+            policies: true,
           },
         },
       },
     });
 
-    if (!business) {
+    if (!member) {
       return NextResponse.json(
-        { hasAccess: false, message: 'Business not found' },
-        { status: 404 }
+        { hasAccess: false, message: 'Not a member or business not found' },
+        { status: 403 }
       );
     }
 
-    // User is a member and has active status
-    const member = business.members[0];
-    const hasAccess = !!member;
-
     // Check if user has at least one policy (meaning they have some access)
-    const hasPolicies = member?.policies && member.policies.length > 0;
+    const hasPolicies = member._count.policies > 0;
 
     return NextResponse.json(
       {
-        hasAccess: hasAccess && hasPolicies,
-        role: member?.role || null,
-        policiesCount: member?.policies?.length || 0,
+        hasAccess: hasPolicies,
+        role: member.role,
+        policiesCount: member._count.policies,
       },
       { status: 200 }
     );

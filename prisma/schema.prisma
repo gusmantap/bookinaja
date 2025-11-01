@@ -180,6 +180,8 @@ model BusinessMember {
   @@index([businessId])
   @@index([userId])
   @@index([status])
+  @@index([businessId, status]) // Optimized for filtering active members
+  @@index([userId, businessId, status]) // Optimized for check-member query
   @@map("business_members")
 }
 

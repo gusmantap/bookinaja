@@ -4,6 +4,7 @@ import { getThemeByName } from '@/lib/themes';
 import BookingForm from '@/components/booking/BookingForm';
 import Image from 'next/image';
 import AdminLayoutWrapper from '@/components/layout/AdminLayoutWrapper';
+import { auth } from '@/auth';
 
 // Helper function to get border radius class
 function getBorderRadiusClass(radius: 'sharp' | 'rounded' | 'soft'): string {
@@ -33,13 +34,34 @@ export default async function BusinessProfilePage({
 }) {
   const { slug } = await params;
 
-  // Fetch business from database
+  // Fetch business from database with optimized field selection
   const business = await prisma.business.findUnique({
     where: { slug },
-    include: {
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      bio: true,
+      phone: true,
+      address: true,
+      email: true,
+      instagram: true,
+      whatsapp: true,
+      theme: true,
+      photos: true,
+      operatingHours: true,
+      bankName: true,
+      accountNumber: true,
+      accountName: true,
       services: {
         where: { isActive: true },
         orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          duration: true,
+        },
       },
     },
   });
@@ -48,15 +70,34 @@ export default async function BusinessProfilePage({
     notFound();
   }
 
+  // Check if current user is owner/admin (server-side)
+  const session = await auth();
+  let isOwner = false;
+
+  if (session?.user?.id) {
+    const member = await prisma.businessMember.findFirst({
+      where: {
+        userId: session.user.id,
+        businessId: business.id,
+        status: 'active',
+      },
+      select: {
+        id: true,
+        _count: {
+          select: {
+            policies: true,
+          },
+        },
+      },
+    });
+
+    isOwner = !!member && member._count.policies > 0;
+  }
+
   // Transform database data to match component structure
   const businessData = {
     ...business,
-    services: business.services.map(service => ({
-      id: service.id,
-      name: service.name,
-      price: service.price,
-      duration: service.duration,
-    })),
+    services: business.services, // Already selected exact fields
     operatingHours: business.operatingHours as Record<string, { open: string; close: string; closed: boolean }> | null,
   };
 
@@ -263,9 +304,9 @@ export default async function BusinessProfilePage({
     </div>
   );
 
-  // Wrap with AdminLayoutWrapper if user is owner
+  // Wrap with AdminLayoutWrapper, pass isOwner prop (no client-side fetch needed)
   return (
-    <AdminLayoutWrapper businessSlug={slug}>
+    <AdminLayoutWrapper businessSlug={slug} isOwner={isOwner}>
       {content}
     </AdminLayoutWrapper>
   );
