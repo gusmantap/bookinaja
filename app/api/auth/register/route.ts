@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Validasi gagal',
-          details: validatedData.error.errors,
+          details: validatedData.error.issues,
         },
         { status: 400 }
       );

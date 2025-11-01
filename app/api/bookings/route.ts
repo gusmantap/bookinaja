@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
           businessId,
         },
         orderBy: {
-          bookingDate: 'desc',
+          date: 'desc',
         },
       });
       return NextResponse.json({ bookings });

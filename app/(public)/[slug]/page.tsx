@@ -57,7 +57,7 @@ export default async function BusinessProfilePage({
       price: service.price,
       duration: service.duration,
     })),
-    operatingHours: business.operatingHours as Record<string, string> | null,
+    operatingHours: business.operatingHours as Record<string, { open: string; close: string; closed: boolean }> | null,
   };
 
   const theme = getThemeByName(business.theme);

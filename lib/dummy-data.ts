@@ -17,8 +17,13 @@ export const dummyBusinesses: Record<string, Business> = {
     accountNumber: '1234567890',
     accountName: 'Komet Barbershop',
     operatingHours: {
-      'Senin - Jumat': '09:00 - 21:00',
-      'Sabtu - Minggu': '09:00 - 22:00',
+      senin: { open: '09:00', close: '21:00', closed: false },
+      selasa: { open: '09:00', close: '21:00', closed: false },
+      rabu: { open: '09:00', close: '21:00', closed: false },
+      kamis: { open: '09:00', close: '21:00', closed: false },
+      jumat: { open: '09:00', close: '21:00', closed: false },
+      sabtu: { open: '09:00', close: '22:00', closed: false },
+      minggu: { open: '09:00', close: '22:00', closed: false },
     },
     theme: 'barbershop-theme-1',
     photos: [
@@ -48,9 +53,13 @@ export const dummyBusinesses: Record<string, Business> = {
     accountNumber: '9876543210',
     accountName: 'JenaNail Studio',
     operatingHours: {
-      'Selasa - Jumat': '10:00 - 20:00',
-      'Sabtu - Minggu': '09:00 - 21:00',
-      'Senin': 'Tutup',
+      senin: { open: '00:00', close: '00:00', closed: true },
+      selasa: { open: '10:00', close: '20:00', closed: false },
+      rabu: { open: '10:00', close: '20:00', closed: false },
+      kamis: { open: '10:00', close: '20:00', closed: false },
+      jumat: { open: '10:00', close: '20:00', closed: false },
+      sabtu: { open: '09:00', close: '21:00', closed: false },
+      minggu: { open: '09:00', close: '21:00', closed: false },
     },
     theme: 'nail-art-theme-1',
     photos: [
@@ -80,8 +89,13 @@ export const dummyBusinesses: Record<string, Business> = {
     accountNumber: '5555666677',
     accountName: 'Memorias Photobooth',
     operatingHours: {
-      'Senin - Jumat': '08:00 - 17:00 (Booking)',
-      'Sabtu - Minggu': 'By Appointment',
+      senin: { open: '08:00', close: '17:00', closed: false },
+      selasa: { open: '08:00', close: '17:00', closed: false },
+      rabu: { open: '08:00', close: '17:00', closed: false },
+      kamis: { open: '08:00', close: '17:00', closed: false },
+      jumat: { open: '08:00', close: '17:00', closed: false },
+      sabtu: { open: '00:00', close: '00:00', closed: true },
+      minggu: { open: '00:00', close: '00:00', closed: true },
     },
     theme: 'photobooth-theme-1',
     photos: [
