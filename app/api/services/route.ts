@@ -1,11 +1,51 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { unstable_cache, revalidateTag } from 'next/cache';
+
+// Cache function for fetching services
+const getServicesForUser = unstable_cache(
+  async (userId: string) => {
+    const member = await prisma.businessMember.findFirst({
+      where: {
+        userId,
+        status: 'active',
+      },
+      select: {
+        businessId: true,
+        business: {
+          select: {
+            services: {
+              orderBy: {
+                createdAt: 'asc',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return member?.business.services ?? [];
+  },
+  ['user-services'],
+  {
+    revalidate: 30, // Cache for 30 seconds
+    tags: ['services'],
+  }
+);
 
 // GET - Fetch all services for user's business
 export async function GET() {
+  const startTime = performance.now();
+  let authTime, dbTime;
+
   try {
+    console.log('[PERF] === GET /api/services START ===');
+
+    const authStart = performance.now();
     const session = await auth();
+    authTime = performance.now() - authStart;
+    console.log(`[PERF] Auth time: ${authTime.toFixed(2)}ms`);
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -14,33 +54,15 @@ export async function GET() {
       );
     }
 
-    // Get user's business
-    const member = await prisma.businessMember.findFirst({
-      where: {
-        userId: session.user.id,
-        status: 'active',
-      },
-      select: {
-        businessId: true,
-      },
-    });
+    // Get services with caching
+    const dbStart = performance.now();
+    const services = await getServicesForUser(session.user.id);
+    dbTime = performance.now() - dbStart;
+    console.log(`[PERF] Database query time: ${dbTime.toFixed(2)}ms`);
 
-    if (!member) {
-      return NextResponse.json(
-        { services: [] },
-        { status: 200 }
-      );
-    }
-
-    // Get all services for this business
-    const services = await prisma.service.findMany({
-      where: {
-        businessId: member.businessId,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
+    const totalTime = performance.now() - startTime;
+    console.log(`[PERF] === TOTAL TIME: ${totalTime.toFixed(2)}ms ===`);
+    console.log(`[PERF] Breakdown - Auth: ${authTime.toFixed(2)}ms, DB: ${dbTime.toFixed(2)}ms, Other: ${(totalTime - authTime - dbTime).toFixed(2)}ms`);
 
     return NextResponse.json(
       { services },
@@ -105,6 +127,9 @@ export async function POST(request: Request) {
         isActive: true,
       },
     });
+
+    // Invalidate services cache
+    revalidateTag('services');
 
     return NextResponse.json(
       { service },

@@ -1,7 +1,15 @@
 import { PrismaClient } from '@prisma/client'
 
 const prismaClientSingleton = () => {
-  return new PrismaClient()
+  return new PrismaClient({
+    log: process.env.NODE_ENV === 'development'
+      ? [
+          { level: 'query', emit: 'event' },
+          { level: 'error', emit: 'stdout' },
+          { level: 'warn', emit: 'stdout' },
+        ]
+      : ['error'],
+  })
 }
 
 declare const globalThis: {
@@ -10,4 +18,13 @@ declare const globalThis: {
 
 export const prisma = globalThis.prismaGlobal ?? prismaClientSingleton()
 
-if (process.env.NODE_ENV !== 'production') globalThis.prismaGlobal = prisma
+// Log query performance in development
+if (process.env.NODE_ENV === 'development') {
+  globalThis.prismaGlobal = prisma;
+
+  prisma.$on('query' as never, (e: any) => {
+    console.log(`[Prisma Query] ${e.query}`);
+    console.log(`[Prisma Params] ${e.params}`);
+    console.log(`[Prisma Duration] ${e.duration}ms`);
+  });
+}

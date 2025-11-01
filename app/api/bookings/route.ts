@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createClient } from '@/lib/supabase/server';
+import { revalidateTag } from 'next/cache';
 
 export async function POST(request: NextRequest) {
   try {
@@ -107,6 +108,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Invalidate bookings cache
+    revalidateTag('bookings');
+
     // TODO: Send WhatsApp notification to business owner and customer
     // TODO: Send confirmation email
 
@@ -124,12 +128,18 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const startTime = performance.now();
+  let authTime, dbTime1, dbTime2, transformTime;
+
   try {
+    console.log('[PERF] === GET /api/bookings START ===');
+
     const searchParams = request.nextUrl.searchParams;
     const businessId = searchParams.get('business_id');
 
     // If businessId provided, use it (for public booking form)
     if (businessId) {
+      const dbStart = performance.now();
       const bookings = await prisma.booking.findMany({
         where: {
           businessId,
@@ -138,12 +148,21 @@ export async function GET(request: NextRequest) {
           date: 'desc',
         },
       });
+      dbTime1 = performance.now() - dbStart;
+      console.log(`[PERF] Public bookings query time: ${dbTime1.toFixed(2)}ms`);
+
+      const totalTime = performance.now() - startTime;
+      console.log(`[PERF] === TOTAL TIME: ${totalTime.toFixed(2)}ms ===`);
+
       return NextResponse.json({ bookings });
     }
 
     // Otherwise, get bookings for authenticated user's business (for dashboard)
+    const authStart = performance.now();
     const { auth } = await import('@/auth');
     const session = await auth();
+    authTime = performance.now() - authStart;
+    console.log(`[PERF] Auth import + execution time: ${authTime.toFixed(2)}ms`);
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -152,55 +171,51 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get user's business
-    const member = await prisma.businessMember.findFirst({
-      where: {
-        userId: session.user.id,
-        status: 'active',
-      },
-      select: {
-        businessId: true,
-      },
-    });
+    // OPTIMIZED: Laravel-style eager loading - single query with proper filtering
+    const dbStart = performance.now();
+    const supabase = await createClient();
 
-    if (!member) {
+    // TRUE EAGER LOADING: Query bookings dengan filter business_members in subquery
+    // Mirip: Booking::with(['service', 'payment'])->whereHas('business.members', ...)
+    const { data: bookings, error: bookingsError } = await supabase
+      .from('bookings')
+      .select(`
+        *,
+        serviceDetail:services(id, name),
+        payment:payments(id, method, status, proofUrl, amount),
+        business:businesses!inner(
+          business_members!inner(userId, status)
+        )
+      `)
+      .eq('business.business_members.userId', session.user.id)
+      .eq('business.business_members.status', 'active')
+      .order('createdAt', { ascending: false });
+
+    dbTime1 = performance.now() - dbStart;
+    console.log(`[PERF] Supabase eager loading query time: ${dbTime1.toFixed(2)}ms`);
+
+    if (bookingsError) {
+      console.log(`[PERF] Error fetching bookings:`, bookingsError);
       return NextResponse.json({ bookings: [] }, { status: 200 });
     }
 
-    // Get all bookings for this business
-    const bookings = await prisma.booking.findMany({
-      where: {
-        businessId: member.businessId,
-      },
-      include: {
-        serviceDetail: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        payment: {
-          select: {
-            id: true,
-            method: true,
-            status: true,
-            proofUrl: true,
-            amount: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    dbTime2 = 0; // Single eager-loaded query (like Laravel!)
+    console.log(`[PERF] Single eager-loaded query (Laravel-style)! ✅`);
 
     // Transform to match frontend expectation
-    const transformedBookings = bookings.map(booking => ({
+    const transformStart = performance.now();
+    const transformedBookings = (bookings || []).map((booking: any) => ({
       ...booking,
       service: booking.serviceDetail || { id: '', name: booking.service },
-      bookingDate: booking.date.toISOString().split('T')[0],
+      bookingDate: new Date(booking.date).toISOString().split('T')[0],
       bookingTime: booking.time,
     }));
+    transformTime = performance.now() - transformStart;
+    console.log(`[PERF] Transform time: ${transformTime.toFixed(2)}ms`);
+
+    const totalTime = performance.now() - startTime;
+    console.log(`[PERF] === TOTAL TIME: ${totalTime.toFixed(2)}ms ===`);
+    console.log(`[PERF] Breakdown - Auth: ${authTime.toFixed(2)}ms, DB1: ${dbTime1.toFixed(2)}ms, DB2: ${dbTime2.toFixed(2)}ms, Transform: ${transformTime.toFixed(2)}ms, Other: ${(totalTime - authTime - dbTime1 - dbTime2 - transformTime).toFixed(2)}ms`);
 
     return NextResponse.json({ bookings: transformedBookings });
   } catch (error) {

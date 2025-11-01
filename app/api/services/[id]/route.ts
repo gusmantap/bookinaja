@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { revalidateTag } from 'next/cache';
 
 // PATCH - Update service (toggle active, edit, etc)
 export async function PATCH(
@@ -58,6 +59,9 @@ export async function PATCH(
         price: body.price ? (typeof body.price === 'string' ? parseFloat(body.price) : body.price) : undefined,
       },
     });
+
+    // Invalidate services cache
+    revalidateTag('services');
 
     return NextResponse.json(
       { service: updatedService },
@@ -122,6 +126,9 @@ export async function DELETE(
     await prisma.service.delete({
       where: { id },
     });
+
+    // Invalidate services cache
+    revalidateTag('services');
 
     return NextResponse.json(
       { message: 'Service deleted successfully' },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { revalidateTag } from 'next/cache';
 
 // PATCH - Update booking status
 export async function PATCH(
@@ -71,6 +72,9 @@ export async function PATCH(
         },
       },
     });
+
+    // Invalidate bookings cache
+    revalidateTag('bookings');
 
     // Transform to match frontend expectation
     const transformed = {
