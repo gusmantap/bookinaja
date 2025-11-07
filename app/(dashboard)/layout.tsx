@@ -37,10 +37,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
     console.log(`[PERF] Supabase eager loading query time: ${dbTime.toFixed(2)}ms`);
 
     if (!error && member && member.business) {
-      businessData = {
-        slug: member.business.slug,
-        name: member.business.name,
-      };
+      const businessInfo = Array.isArray(member.business) ? member.business[0] : member.business;
+
+      if (businessInfo) {
+        businessData = {
+          slug: businessInfo.slug,
+          name: businessInfo.name,
+        };
+      }
     }
   }
 

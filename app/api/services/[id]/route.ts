@@ -61,7 +61,7 @@ export async function PATCH(
     });
 
     // Invalidate services cache
-    revalidateTag('services');
+    revalidateTag('services', 'default');
 
     return NextResponse.json(
       { service: updatedService },
@@ -128,7 +128,7 @@ export async function DELETE(
     });
 
     // Invalidate services cache
-    revalidateTag('services');
+    revalidateTag('services', 'default');
 
     return NextResponse.json(
       { message: 'Service deleted successfully' },

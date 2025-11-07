@@ -74,7 +74,7 @@ export async function PATCH(
     });
 
     // Invalidate bookings cache
-    revalidateTag('bookings');
+    revalidateTag('bookings', 'default');
 
     // Transform to match frontend expectation
     const transformed = {

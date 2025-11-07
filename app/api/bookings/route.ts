@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Invalidate bookings cache
-    revalidateTag('bookings');
+    revalidateTag('bookings', 'default');
 
     // TODO: Send WhatsApp notification to business owner and customer
     // TODO: Send confirmation email
