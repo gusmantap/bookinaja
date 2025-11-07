@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 
 type Service = {
@@ -10,15 +11,62 @@ type Service = {
   isActive: boolean;
 };
 
+type ServiceFormData = {
+  name: string;
+  duration: string;
+  price: string;
+  isActive: boolean;
+};
+
+type ModalMode = 'add' | 'edit';
+
 export default function ServicesClient({ initialServices }: { initialServices: Service[] }) {
   const [services, setServices] = useState<Service[]>(initialServices);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [modalMode, setModalMode] = useState<ModalMode>('add');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ServiceFormData>({
     name: '',
     duration: '',
     price: '',
+    isActive: true,
   });
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      duration: '',
+      price: '',
+      isActive: true,
+    });
+  };
+
+  const openAddModal = () => {
+    setModalMode('add');
+    setEditingService(null);
+    resetForm();
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (service: Service) => {
+    setModalMode('edit');
+    setEditingService(service);
+    setFormData({
+      name: service.name,
+      duration: service.duration,
+      price: service.price.toString(),
+      isActive: service.isActive,
+    });
+    setIsModalOpen(true);
+  };
+
+  const closeModal = (force = false) => {
+    if (isSubmitting && !force) return;
+    setIsModalOpen(false);
+    setEditingService(null);
+    resetForm();
+  };
 
   const handleToggleActive = async (id: string) => {
     const service = services.find(s => s.id === id);
@@ -66,187 +114,133 @@ export default function ServicesClient({ initialServices }: { initialServices: S
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/services', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.name,
-          duration: formData.duration,
-          price: parseFloat(formData.price),
-        }),
-      });
+      const payload = {
+        name: formData.name,
+        duration: formData.duration,
+        price: parseFloat(formData.price),
+        isActive: formData.isActive,
+      };
 
-      if (response.ok) {
-        const data = await response.json();
-        setServices([...services, data.service]);
-        setFormData({ name: '', duration: '', price: '' });
-        setShowAddForm(false);
-      } else {
-        alert('Gagal menambahkan layanan');
+      if (modalMode === 'add') {
+        const response = await fetch('/api/services', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setServices((prev) => [...prev, data.service]);
+          closeModal(true);
+        } else {
+          alert('Gagal menambahkan layanan');
+        }
+      } else if (modalMode === 'edit' && editingService) {
+        const response = await fetch(`/api/services/${editingService.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setServices((prev) =>
+            prev.map((service) =>
+              service.id === data.service.id ? data.service : service
+            )
+          );
+          closeModal(true);
+        } else {
+          alert('Gagal memperbarui layanan');
+        }
       }
     } catch (error) {
-      console.error('Error adding service:', error);
-      alert('Gagal menambahkan layanan');
+      console.error('Error saving service:', error);
+      alert('Terjadi kesalahan, coba lagi');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const handleTextChange =
+    (field: 'name' | 'duration' | 'price') =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const { value } = e.target;
+      setFormData((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+    };
+
+  const modalTitle = modalMode === 'add' ? 'Tambah Layanan Baru' : 'Edit Layanan';
+  const submitLabel = modalMode === 'add' ? 'Simpan Layanan' : 'Simpan Perubahan';
 
   return (
-    <div className="bg-zinc-50 min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-zinc-900 mb-2">Kelola Layanan</h1>
-          <p className="text-zinc-600">Atur layanan yang ditawarkan bisnis Anda</p>
-        </div>
+    <>
+      <div className="bg-zinc-50 min-h-screen">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Header */}
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-zinc-900 mb-2">Kelola Layanan</h1>
+            <p className="text-zinc-600">Atur layanan yang ditawarkan bisnis Anda</p>
+          </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl p-4 border-2 border-zinc-200">
-            <div className="text-2xl font-bold text-zinc-900">{services.length}</div>
-            <div className="text-sm text-zinc-600">Total Layanan</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-2 border-zinc-200">
-            <div className="text-2xl font-bold text-green-600">
-              {services.filter((s) => s.isActive).length}
-            </div>
-            <div className="text-sm text-zinc-600">Aktif</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-2 border-zinc-200">
-            <div className="text-2xl font-bold text-red-600">
-              {services.filter((s) => !s.isActive).length}
-            </div>
-            <div className="text-sm text-zinc-600">Nonaktif</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-2 border-zinc-200">
-            <div className="text-2xl font-bold text-purple-600">
-              {services.length > 0
-                ? `Rp ${Math.min(...services.map((s) => s.price)).toLocaleString('id-ID')}`
-                : '-'}
-            </div>
-            <div className="text-sm text-zinc-600">Harga Terendah</div>
-          </div>
-        </div>
-
-        {/* Add Service Button */}
-        <div className="mb-6">
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all shadow-sm"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-            </svg>
-            {showAddForm ? 'Tutup Form' : 'Tambah Layanan Baru'}
-          </button>
-        </div>
-
-        {/* Add Service Form */}
-        {showAddForm && (
-          <div className="bg-white rounded-xl p-6 border-2 border-purple-200 mb-6">
-            <h2 className="text-xl font-bold text-zinc-900 mb-4">Tambah Layanan Baru</h2>
-            <form onSubmit={handleAddService} className="space-y-4">
-              {/* Name */}
-              <div>
-                <label htmlFor="name" className="block text-sm font-semibold text-zinc-700 mb-2">
-                  Nama Layanan <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  required
-                  value={formData.name}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border-2 border-zinc-300 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all"
-                  placeholder="Contoh: Haircut Classic"
-                />
+          {/* Stats Cards */}
+          <div className="mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="bg-white rounded-lg border border-zinc-200 p-4">
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Total Layanan</p>
+                <p className="text-2xl font-bold text-zinc-900 mt-1">{services.length}</p>
               </div>
-
-              {/* Duration and Price */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Duration */}
-                <div>
-                  <label htmlFor="duration" className="block text-sm font-semibold text-zinc-700 mb-2">
-                    Durasi <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="duration"
-                    name="duration"
-                    required
-                    value={formData.duration}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-zinc-300 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all"
-                    placeholder="Contoh: 30 menit"
-                  />
-                </div>
-
-                {/* Price */}
-                <div>
-                  <label htmlFor="price" className="block text-sm font-semibold text-zinc-700 mb-2">
-                    Harga (Rp) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    id="price"
-                    name="price"
-                    required
-                    min="0"
-                    step="1000"
-                    value={formData.price}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-zinc-300 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all"
-                    placeholder="50000"
-                  />
-                </div>
+              <div className="bg-white rounded-lg border border-zinc-200 p-4">
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Aktif</p>
+                <p className="text-2xl font-bold text-green-600 mt-1">
+                  {services.filter((s) => s.isActive).length}
+                </p>
               </div>
-
-              {/* Submit Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddForm(false)}
-                  className="flex-1 px-6 py-3 border-2 border-zinc-300 text-zinc-700 font-semibold rounded-xl hover:bg-zinc-50 transition-all"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? 'Menyimpan...' : 'Simpan Layanan'}
-                </button>
+              <div className="bg-white rounded-lg border border-zinc-200 p-4 hidden sm:block">
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Nonaktif</p>
+                <p className="text-2xl font-bold text-red-500 mt-1">
+                  {services.filter((s) => !s.isActive).length}
+                </p>
               </div>
-            </form>
+            </div>
           </div>
-        )}
 
-        {/* Services List */}
-        <div className="space-y-4">
-          {services.map((service) => (
-            <div
-              key={service.id}
-              className={`bg-white rounded-xl p-6 border-2 transition-all ${
-                service.isActive
-                  ? 'border-zinc-200 hover:border-purple-300'
-                  : 'border-zinc-100 opacity-60'
-              }`}
+          {/* Add Service Button */}
+          <div className="mb-6">
+            <button
+              onClick={openAddModal}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all shadow-sm"
             >
-              <div className="flex items-start justify-between gap-4">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+              </svg>
+              Tambah Layanan Baru
+            </button>
+          </div>
+
+          {/* Services List */}
+          <div className="space-y-4">
+            {services.map((service) => (
+              <div
+                key={service.id}
+                className={`bg-white rounded-xl p-6 border-2 transition-all flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between ${
+                  service.isActive
+                    ? 'border-zinc-200 hover:border-purple-300'
+                    : 'border-zinc-100 opacity-60'
+                }`}
+              >
                 {/* Service Info */}
-                <div className="flex-1">
+                <Link
+                  href={`/services/${service.id}`}
+                  className="flex-1 block group focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 rounded-xl"
+                  aria-label={`Lihat detail ${service.name}`}
+                >
                   <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-bold text-zinc-900">{service.name}</h3>
+                    <h3 className="text-lg font-bold text-zinc-900 group-hover:text-purple-700 transition-colors">
+                      {service.name}
+                    </h3>
                     {service.isActive ? (
                       <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">
                         AKTIF
@@ -271,10 +265,10 @@ export default function ServicesClient({ initialServices }: { initialServices: S
                       Rp {service.price.toLocaleString('id-ID')}
                     </div>
                   </div>
-                </div>
+                </Link>
 
                 {/* Actions */}
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {/* Toggle Active */}
                   <button
                     onClick={() => handleToggleActive(service.id)}
@@ -293,6 +287,7 @@ export default function ServicesClient({ initialServices }: { initialServices: S
 
                   {/* Edit */}
                   <button
+                    onClick={() => openEditModal(service)}
                     className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all"
                     title="Edit"
                   >
@@ -313,30 +308,172 @@ export default function ServicesClient({ initialServices }: { initialServices: S
                   </button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Empty State */}
-        {services.length === 0 && (
-          <div className="bg-white rounded-xl p-12 border-2 border-zinc-200 text-center">
-            <svg className="w-16 h-16 mx-auto mb-4 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-            </svg>
-            <h3 className="text-lg font-bold text-zinc-900 mb-2">Belum ada layanan</h3>
-            <p className="text-zinc-600 mb-4">Mulai tambahkan layanan pertama Anda</p>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-              </svg>
-              Tambah Layanan
-            </button>
+            ))}
           </div>
-        )}
+
+          {/* Empty State */}
+          {services.length === 0 && (
+            <div className="bg-white rounded-xl p-12 border-2 border-zinc-200 text-center">
+              <svg className="w-16 h-16 mx-auto mb-4 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+              </svg>
+              <h3 className="text-lg font-bold text-zinc-900 mb-2">Belum ada layanan</h3>
+              <p className="text-zinc-600 mb-4">Mulai tambahkan layanan pertama Anda</p>
+              <button
+                onClick={openAddModal}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                Tambah Layanan
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Add/Edit Service Modal */}
+      {isModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => closeModal()}
+        >
+          <div
+            className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-purple-100 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="service-modal-title"
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
+              <h2 id="service-modal-title" className="text-xl font-bold text-zinc-900">
+                {modalTitle}
+              </h2>
+              <button
+                onClick={() => closeModal()}
+                className="p-2 rounded-full hover:bg-zinc-100 transition-all text-zinc-500 disabled:opacity-40"
+                title="Tutup"
+                disabled={isSubmitting}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-6 py-6">
+              <form onSubmit={handleAddService} className="space-y-4">
+                {/* Name */}
+                <div>
+                  <label htmlFor="name" className="block text-sm font-semibold text-zinc-700 mb-2">
+                    Nama Layanan <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    required
+                    value={formData.name}
+                    onChange={handleTextChange('name')}
+                    className="w-full px-4 py-3 border-2 border-zinc-300 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all"
+                    placeholder="Contoh: Haircut Classic"
+                  />
+                </div>
+
+                {/* Duration and Price */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Duration */}
+                  <div>
+                    <label htmlFor="duration" className="block text-sm font-semibold text-zinc-700 mb-2">
+                      Durasi <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="duration"
+                      name="duration"
+                      required
+                      value={formData.duration}
+                      onChange={handleTextChange('duration')}
+                      className="w-full px-4 py-3 border-2 border-zinc-300 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all"
+                      placeholder="Contoh: 30 menit"
+                    />
+                  </div>
+
+                  {/* Price */}
+                  <div>
+                    <label htmlFor="price" className="block text-sm font-semibold text-zinc-700 mb-2">
+                      Harga (Rp) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      id="price"
+                      name="price"
+                      required
+                      min="0"
+                      step="1000"
+                      value={formData.price}
+                      onChange={handleTextChange('price')}
+                      className="w-full px-4 py-3 border-2 border-zinc-300 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all"
+                      placeholder="50000"
+                    />
+                  </div>
+                </div>
+
+                {/* Active Toggle */}
+                <div className="flex items-start sm:items-center justify-between gap-4 border border-zinc-200 rounded-xl px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-900">Aktifkan Layanan</p>
+                    <p className="text-xs text-zinc-500">Nonaktifkan jika Anda ingin menyembunyikan sementara.</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={formData.isActive}
+                    disabled={isSubmitting}
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        isActive: !prev.isActive,
+                      }))
+                    }
+                    className={`w-14 h-8 rounded-full border-2 transition-all flex items-center px-1 ${
+                      formData.isActive
+                        ? 'bg-green-500 border-green-500 justify-end'
+                        : 'bg-zinc-100 border-zinc-300 justify-start'
+                    } ${isSubmitting ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
+                    <span
+                      className={`w-6 h-6 rounded-full bg-white shadow transition-all ${
+                        formData.isActive ? '' : ''
+                      }`}
+                    ></span>
+                  </button>
+                </div>
+
+                {/* Submit Buttons */}
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => closeModal()}
+                    className="flex-1 px-6 py-3 border-2 border-zinc-300 text-zinc-700 font-semibold rounded-xl hover:bg-zinc-50 transition-all disabled:opacity-50"
+                    disabled={isSubmitting}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? 'Menyimpan...' : submitLabel}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

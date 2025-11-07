@@ -50,11 +50,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   console.log(`[PERF] 🎯 NO API ROUTE OVERHEAD! Direct SSR query`);
 
   return (
-    <div className="relative min-h-screen pb-16">
+    <div className="relative min-h-screen">
       <DashboardNav businessData={businessData} />
 
       {/* Content dengan padding top untuk header */}
-      <div className="pt-14">
+      <div className="pt-16 pb-32 lg:pb-16">
         {children}
       </div>
     </div>

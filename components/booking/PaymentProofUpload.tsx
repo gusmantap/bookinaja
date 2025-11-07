@@ -8,6 +8,9 @@ interface PaymentProofUploadProps {
   previewUrl: string | null;
   onFileChange: (file: File | null, previewUrl: string | null) => void;
   theme: Theme;
+  required?: boolean;
+  hideLabel?: boolean;
+  label?: string;
 }
 
 export default function PaymentProofUpload({
@@ -15,6 +18,9 @@ export default function PaymentProofUpload({
   previewUrl,
   onFileChange,
   theme,
+  required = true,
+  hideLabel = false,
+  label = 'Upload Bukti Transfer/DP',
 }: PaymentProofUploadProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -50,16 +56,18 @@ export default function PaymentProofUpload({
 
   return (
     <div>
-      <label className="block text-sm font-semibold text-zinc-700 mb-2">
-        Upload Bukti Transfer/DP <span className="text-red-500">*</span>
-      </label>
+      {!hideLabel && (
+        <label className="block text-sm font-semibold text-zinc-700 mb-2">
+          {label} {required && <span className="text-red-500">*</span>}
+        </label>
+      )}
       <div className="relative">
         <input
           type="file"
           id="paymentProof"
           name="payment_proof"
           accept="image/jpeg,image/jpg,image/png"
-          required
+          required={required}
           onChange={handleFileChange}
           className="hidden"
         />

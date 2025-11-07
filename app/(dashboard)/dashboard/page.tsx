@@ -11,21 +11,9 @@ const stats = {
   confirmed_bookings: 15,
   completed_bookings: 20,
   cancelled_bookings: 4,
-  total_revenue: 23500000,
-  this_month_revenue: 4750000,
   profile_views: 342,
   conversion_rate: 13.8,
 };
-
-const revenueChart = [
-  { date: '25 Oct', amount: 650000 },
-  { date: '26 Oct', amount: 780000 },
-  { date: '27 Oct', amount: 520000 },
-  { date: '28 Oct', amount: 890000 },
-  { date: '29 Oct', amount: 720000 },
-  { date: '30 Oct', amount: 960000 },
-  { date: '31 Oct', amount: 850000 },
-];
 
 const recentBookings = [
   {
@@ -88,8 +76,6 @@ export default function DashboardPage() {
   const [slug] = useState('komet'); // TODO: Get from session/auth
   const [businessName] = useState('Komet Barbershop'); // TODO: Get from session/auth
   const [currentWeekStart, setCurrentWeekStart] = useState(1); // Start from day 1
-
-  const maxAmount = Math.max(...revenueChart.map((d) => d.amount));
 
   // Week navigation functions
   const getWeekDays = () => {
@@ -207,93 +193,37 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Revenue & Recent Bookings Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          {/* Revenue Chart */}
-          <div className="lg:col-span-2 bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border-2 border-zinc-200">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-3">
-              <div>
-                <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-1">Revenue 7 Hari Terakhir</h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xl sm:text-2xl font-bold text-zinc-900">Rp {(stats.this_month_revenue / 1000).toLocaleString('id-ID')}K</span>
-                  <span className="text-xs sm:text-sm text-green-600 font-semibold">+18.2%</span>
-                </div>
+        {/* Booking Performance Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          {/* Completed */}
+          <div className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border-2 border-zinc-200">
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                </svg>
               </div>
-              <div className="text-left sm:text-right">
-                <div className="text-xs text-zinc-500 mb-1">Total Revenue</div>
-                <div className="text-base sm:text-lg font-bold text-zinc-900">Rp {(stats.total_revenue / 1000000).toFixed(1)}M</div>
-              </div>
+              <span className="text-xl sm:text-2xl font-bold text-zinc-900">{stats.completed_bookings}</span>
             </div>
-
-            {/* Simple Bar Chart */}
-            <div className="flex items-end justify-between gap-1 sm:gap-2 h-36 sm:h-48">
-              {revenueChart.map((data, idx) => {
-                const height = (data.amount / maxAmount) * 100;
-                return (
-                  <div key={idx} className="flex-1 flex flex-col items-center gap-1 sm:gap-2">
-                    <div
-                      className="w-full bg-gradient-to-t from-blue-600 to-purple-600 rounded-t-lg hover:from-blue-700 hover:to-purple-700 transition-all relative group"
-                      style={{ height: `${height}%` }}
-                    >
-                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10">
-                        Rp {(data.amount / 1000).toLocaleString('id-ID')}K
-                      </div>
-                    </div>
-                    <span className="text-[10px] sm:text-xs text-zinc-600 font-medium">{data.date}</span>
-                  </div>
-                );
-              })}
+            <div className="text-xs sm:text-sm text-zinc-600">Completed</div>
+            <div className="mt-1 sm:mt-2 text-xs text-green-600 font-semibold">
+              {((stats.completed_bookings / stats.total_bookings) * 100).toFixed(1)}% completion rate
             </div>
           </div>
 
-          {/* Summary Cards */}
-          <div className="space-y-3 sm:space-y-4">
-            {/* This Month Revenue */}
-            <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg sm:rounded-xl p-4 sm:p-6 text-white">
-              <div className="flex items-center gap-3 mb-2 sm:mb-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold opacity-90">Bulan Ini</div>
-                  <div className="text-xl sm:text-2xl font-bold">Rp {(stats.this_month_revenue / 1000).toLocaleString('id-ID')}K</div>
-                </div>
+          {/* Cancelled */}
+          <div className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border-2 border-zinc-200">
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-red-50 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
               </div>
-              <div className="text-xs opacity-90">+18.2% dari bulan lalu</div>
+              <span className="text-xl sm:text-2xl font-bold text-zinc-900">{stats.cancelled_bookings}</span>
             </div>
-
-            {/* Completed */}
-            <div className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border-2 border-zinc-200">
-              <div className="flex items-center justify-between mb-2 sm:mb-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                  </svg>
-                </div>
-                <span className="text-xl sm:text-2xl font-bold text-zinc-900">{stats.completed_bookings}</span>
-              </div>
-              <div className="text-xs sm:text-sm text-zinc-600">Completed</div>
-              <div className="mt-1 sm:mt-2 text-xs text-green-600 font-semibold">
-                {((stats.completed_bookings / stats.total_bookings) * 100).toFixed(1)}% completion rate
-              </div>
-            </div>
-
-            {/* Cancelled */}
-            <div className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border-2 border-zinc-200">
-              <div className="flex items-center justify-between mb-2 sm:mb-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-red-50 rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                  </svg>
-                </div>
-                <span className="text-xl sm:text-2xl font-bold text-zinc-900">{stats.cancelled_bookings}</span>
-              </div>
-              <div className="text-xs sm:text-sm text-zinc-600">Cancelled</div>
-              <div className="mt-1 sm:mt-2 text-xs text-zinc-500">
-                {((stats.cancelled_bookings / stats.total_bookings) * 100).toFixed(1)}% cancellation rate
-              </div>
+            <div className="text-xs sm:text-sm text-zinc-600">Cancelled</div>
+            <div className="mt-1 sm:mt-2 text-xs text-zinc-500">
+              {((stats.cancelled_bookings / stats.total_bookings) * 100).toFixed(1)}% cancellation rate
             </div>
           </div>
         </div>
