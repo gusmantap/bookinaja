@@ -12,6 +12,9 @@ export default auth((req) => {
   const isOnSettings = nextUrl.pathname.startsWith('/settings');
   const isOnBooking = nextUrl.pathname.startsWith('/booking');
   const isOnServices = nextUrl.pathname.startsWith('/services');
+  const isOnLanding =
+    nextUrl.pathname === '/' ||
+    nextUrl.pathname === '/home';
 
   const protectedRoutes = isOnDashboard || isOnOnboarding || isOnSettings || isOnBooking || isOnServices;
 
@@ -30,7 +33,8 @@ export default auth((req) => {
     isLoggedIn &&
     !(user as any)?.onboardingCompleted &&
     !isOnOnboarding &&
-    !isOnAuth
+    !isOnAuth &&
+    !isOnLanding
   ) {
     return NextResponse.redirect(new URL('/onboarding', nextUrl));
   }

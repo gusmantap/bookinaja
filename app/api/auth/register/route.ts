@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import { createClient } from '@supabase/supabase-js';
 
 const registerSchema = z.object({
   email: z.string().email('Email tidak valid'),
@@ -40,14 +40,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json(
+        { error: 'Konfigurasi Supabase belum lengkap' },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    const { data, error: supabaseError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+        },
+      },
+    });
+
+    if (supabaseError || !data.user) {
+      return NextResponse.json(
+        {
+          error: supabaseError?.message || 'Gagal membuat pengguna Supabase',
+        },
+        { status: 400 }
+      );
+    }
+
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: {
+        name,
+      },
+      create: {
+        id: data.user.id,
         email,
-        password: hashedPassword,
         name,
         onboardingCompleted: false,
       },

@@ -84,7 +84,7 @@ export default function LandingPage() {
               <h1 className="text-2xl font-bold text-zinc-900">Bookinaja</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <Link href="/auth/signin" className="px-4 py-2 text-sm font-medium text-zinc-700 hover:text-zinc-900 transition">
+              <Link href="/login" className="px-4 py-2 text-sm font-medium text-zinc-700 hover:text-zinc-900 transition">
                 Masuk
               </Link>
             </div>

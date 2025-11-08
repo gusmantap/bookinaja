@@ -3,7 +3,21 @@ import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import bcrypt from 'bcryptjs';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Supabase environment variables are not set');
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+});
 
 export const authConfig = {
   pages: {
@@ -72,20 +86,34 @@ export const authConfig = {
 
         const { email, password } = parsedCredentials.data;
 
-        const user = await prisma.user.findUnique({
-          where: { email },
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
         });
 
-        if (!user || !user.password) {
+        if (error || !data.user) {
           return null;
         }
 
-        // Check password
-        const passwordMatch = await bcrypt.compare(password, user.password);
+        const supabaseUser = data.user;
+        const nameFromMetadata =
+          (supabaseUser.user_metadata?.name as string | undefined) ||
+          (supabaseUser.user_metadata?.full_name as string | undefined) ||
+          supabaseUser.email ||
+          '';
 
-        if (!passwordMatch) {
-          return null;
-        }
+        const user = await prisma.user.upsert({
+          where: { email },
+          update: {
+            name: nameFromMetadata,
+          },
+          create: {
+            id: supabaseUser.id,
+            email,
+            name: nameFromMetadata,
+            onboardingCompleted: false,
+          },
+        });
 
         return {
           id: user.id,
